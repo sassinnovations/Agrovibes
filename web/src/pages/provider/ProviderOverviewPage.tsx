@@ -9,7 +9,7 @@ import {
 } from "../../api/providerKyc";
 import { readProviderDraft } from "./providerDraft";
 
-const BANK_KEY = "cropvibe.provider.bank.v1";
+const BANK_KEY = "cropvibe.provider.bank.v2";
 const IFSC_PATTERN = /^[A-Z]{4}0[A-Z0-9]{6}$/;
 
 type SavedBank = {

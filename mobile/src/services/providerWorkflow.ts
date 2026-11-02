@@ -96,7 +96,7 @@ type ProviderWorkflowState = {
   notifications: WorkflowNotification[];
 };
 
-const STORAGE_KEY = "agrovibes.provider.workflow.v1";
+const STORAGE_KEY = "agrovibes.provider.workflow.v2";
 
 const DEFAULT_STATE: ProviderWorkflowState = {
   registrationStatus: "not_submitted",
@@ -395,52 +395,6 @@ export async function submitListingForApproval(input: {
   return listingId;
 }
 
-/**
- * Local helper for listing approvals demo. KYC approval now comes from Admin API.
- */
-export async function processAdminApprovals(): Promise<{ registrationApproved: boolean; listingsApproved: number }> {
-  let state = await readState();
-  let registrationApproved = false;
-  let listingsApproved = 0;
-
-  const updatedListings = state.listings.map((listing) => {
-    if (listing.status !== "pending") return listing;
-    listingsApproved += 1;
-    return {
-      ...listing,
-      status: "approved" as ListingApprovalStatus,
-      approvedAt: new Date().toISOString()
-    };
-  });
-  if (listingsApproved > 0) {
-    state = {
-      ...state,
-      listings: updatedListings
-    };
-    state = pushNotification(
-      state,
-      "provider",
-      "Listing Approved",
-      `${listingsApproved} listing(s) approved by admin and ready for customers.`
-    );
-  }
-
-  await writeState(state);
-  return { registrationApproved, listingsApproved };
-}
-
-export async function markProviderRegistrationApprovedLocally(): Promise<void> {
-  let state = await readState();
-  state = { ...state, registrationStatus: "approved" };
-  state = pushNotification(
-    state,
-    "provider",
-    "Registration Approved",
-    "Admin approved your profile. You can now start your business."
-  );
-  await writeState(state);
-}
-
 export async function uploadLocalListings(token?: string | null): Promise<ProviderListingRecord[]> {
   const state = await readState();
   if (!token) {
@@ -512,7 +466,6 @@ export async function syncProviderListingsFromApi(token?: string | null): Promis
       createdAt: row.createdAt
     }));
     const localOnly = state.listings.filter((row) => !isServerListingId(row.id));
-    if (!remoteRows.length && state.listings.length) return state.listings;
     const listings = [...remoteRows, ...localOnly];
     await writeState({ ...state, listings });
     return listings;
