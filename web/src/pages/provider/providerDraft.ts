@@ -32,7 +32,7 @@ export type ProviderJoinDraft = {
   ifsc: string;
 };
 
-const STORAGE_KEY = "cropvibe.provider.join.v1";
+const STORAGE_KEY = "cropvibe.provider.join.v2";
 
 export const EMPTY_PROVIDER_DRAFT: ProviderJoinDraft = {
   track: "rental",

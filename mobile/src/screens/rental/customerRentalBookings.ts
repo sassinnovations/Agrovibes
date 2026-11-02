@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { submitRentalBooking } from "../../services/api";
 
-const STORAGE_KEY = "agrovibes.customer.rentalBookings.v1";
+const STORAGE_KEY = "agrovibes.customer.rentalBookings.v2";
 
 export type CustomerRentalBooking = {
   id: string;
