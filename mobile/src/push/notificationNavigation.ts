@@ -529,6 +529,14 @@ export async function handleNotificationResponse(
       scheduleOpenNotificationsSheet();
     }
     scheduled = true;
+  } else if (type === "provider_kyc_approved") {
+    schedule(() => {
+      if (navigationRef.isReady()) navigationRef.navigate("ProviderMain");
+    });
+  } else if (type === "provider_kyc_rejected") {
+    schedule(() => {
+      if (navigationRef.isReady()) navigationRef.navigate("ProviderOnboarding");
+    });
   } else if (type === "weather_alert") {
     schedule(() => navigateToWeather(), "Weather");
   } else if (type === "plant_rescan") {

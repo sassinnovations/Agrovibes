@@ -37,7 +37,7 @@ import { NotificationPostThumb } from "../components/NotificationPostThumb";
 import { SwipeActionsRow, type SwipeAction } from "../components/SwipeActionsRow";
 import { StoryRingAvatar } from "../components/StoryRingAvatar";
 import { useLanguage } from "../localization/LanguageContext";
-import { navigateToJoinLive, navigateToMyProfile, navigateToPublicProfile, navigateToWeather } from "../navigation/navigationRef";
+import { navigateToJoinLive, navigateToMyProfile, navigateToPublicProfile, navigateToWeather, navigationRef } from "../navigation/navigationRef";
 import {
   hasSharedPostViewerListener,
   queueOpenSharedPostViewer
@@ -950,6 +950,9 @@ export function NotificationPanelProvider({ children }: { children: React.ReactN
   };
 
   const liveStartLabel = (n: any) => {
+    if (n.type === "provider_kyc_approved" || n.type === "provider_kyc_rejected" || n.type === "provider_kyc_submitted") {
+      return String(n.commentExcerpt || "").trim() || "Provider application update";
+    }
     if (n.type === "weather_alert") {
       return String(n.commentExcerpt || "").trim() || "Weather alert";
     }
@@ -1154,6 +1157,9 @@ export function NotificationPanelProvider({ children }: { children: React.ReactN
     if (kind === "accepted") return "checkmark";
     if (kind === "declined") return "close";
     if (kind === "weather_alert") return "rainy";
+    if (kind === "provider_kyc_approved") return "checkmark";
+    if (kind === "provider_kyc_rejected") return "close";
+    if (kind === "provider_kyc_submitted") return "document-text";
     if (kind.startsWith("live")) return "radio";
     return "heart";
   }, []);
@@ -1370,6 +1376,29 @@ export function NotificationPanelProvider({ children }: { children: React.ReactN
                                         {String(n.commentExcerpt || "Weather alert")}
                                       </Text>
                                     )
+                                    : item.kind === "provider_kyc_approved" ||
+                                        item.kind === "provider_kyc_rejected" ||
+                                        item.kind === "provider_kyc_submitted"
+                                      ? (
+                                        <Text
+                                          style={styles.figMessageText}
+                                          onPress={() => {
+                                            closeNotificationSheet();
+                                            if (!navigationRef.isReady()) return;
+                                            if (item.kind === "provider_kyc_approved") {
+                                              navigationRef.navigate("ProviderMain");
+                                              return;
+                                            }
+                                            if (item.kind === "provider_kyc_rejected") {
+                                              navigationRef.navigate("ProviderOnboarding");
+                                              return;
+                                            }
+                                            navigationRef.navigate("Main", { screen: "Home" });
+                                          }}
+                                        >
+                                          {String(n.commentExcerpt || "Provider application update")}
+                                        </Text>
+                                      )
                                     : renderNamedMessage(n, (m) => liveStartLabel({ ...n, actorName: m }))}
                           <Text style={styles.figTimeText}>{relativeTimeLabel(item.createdAt)}</Text>
                         </View>
@@ -1422,6 +1451,26 @@ export function NotificationPanelProvider({ children }: { children: React.ReactN
                                 }
                                 return <View style={styles.figPostPlaceholder} />;
                               })()
+                            ) : item.kind === "provider_kyc_approved" ? (
+                              <Pressable
+                                style={styles.joinLiveBtn}
+                                onPress={() => {
+                                  closeNotificationSheet();
+                                  if (navigationRef.isReady()) navigationRef.navigate("ProviderMain");
+                                }}
+                              >
+                                <Text style={styles.joinLiveText}>Listings</Text>
+                              </Pressable>
+                            ) : item.kind === "provider_kyc_rejected" ? (
+                              <Pressable
+                                style={styles.joinLiveBtn}
+                                onPress={() => {
+                                  closeNotificationSheet();
+                                  if (navigationRef.isReady()) navigationRef.navigate("ProviderOnboarding");
+                                }}
+                              >
+                                <Text style={styles.joinLiveText}>Review</Text>
+                              </Pressable>
                             ) : item.kind === "weather_alert" ? (
                               <Pressable
                                 style={styles.joinLiveBtn}

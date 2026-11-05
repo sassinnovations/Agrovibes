@@ -282,7 +282,7 @@ export function MarketplaceScreen() {
                 <Text style={styles.liveTimer}>02:34:{String(33 + idx).padStart(2, "0")}</Text>
               </View>
               <Text style={styles.livePrice}>
-                {rupee(item.pricePerKg)} {liveDealUnit(idx)}
+                {item.pricePerKg > 0 ? `${rupee(item.pricePerKg)} ${liveDealUnit(idx)}` : "Rate on request"}
               </Text>
               <ListingCartControl listing={item} index={i} variant="live" />
             </View>
@@ -335,8 +335,10 @@ export function MarketplaceScreen() {
               </View>
               <View style={styles.priceRow}>
                 <View>
-                  <Text style={styles.price}>{rupee(item.pricePerKg)}</Text>
-                  <Text style={styles.unit}>{index % 2 === 0 ? "/ 500g pack" : "/ unit"}</Text>
+                  <Text style={styles.price}>{item.pricePerKg > 0 ? rupee(item.pricePerKg) : "Rate on request"}</Text>
+                  {item.pricePerKg > 0 ? (
+                    <Text style={styles.unit}>{index % 2 === 0 ? "/ 500g pack" : "/ unit"}</Text>
+                  ) : null}
                 </View>
                 <ListingCartControl listing={item} index={index} variant="grid" />
               </View>
@@ -396,8 +398,8 @@ function ProductDetail({
 
       <View style={detailStyles.detailBody}>
         <View style={detailStyles.detailPriceRow}>
-          <Text style={detailStyles.detailPrice}>{rupee(item.pricePerKg)}</Text>
-          <Text style={detailStyles.detailUnit}>/ pack</Text>
+          <Text style={detailStyles.detailPrice}>{item.pricePerKg > 0 ? rupee(item.pricePerKg) : "Rate on request"}</Text>
+          {item.pricePerKg > 0 ? <Text style={detailStyles.detailUnit}>/ pack</Text> : null}
         </View>
 
         <View style={detailStyles.detailRatingRow}>

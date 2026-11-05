@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
+import { fetchProviderKycStatus } from "../../api/providerKyc";
 import {
   SettingsIconActivity,
   SettingsIconBack,
@@ -90,7 +91,28 @@ function PromoCard({ onClick }: { onClick?: () => void }) {
 
 export function SettingsMenuPage() {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, token } = useAuth();
+
+  const openProvider = async () => {
+    if (!token) {
+      navigate("/provider/join");
+      return;
+    }
+    try {
+      const status = await fetchProviderKycStatus(token);
+      if (status.status === "approved") {
+        navigate("/provider");
+        return;
+      }
+      if (status.status === "rejected") {
+        navigate("/provider/join");
+        return;
+      }
+      navigate("/");
+    } catch {
+      navigate("/");
+    }
+  };
 
   return (
     <div className="settings-page">
@@ -119,8 +141,10 @@ export function SettingsMenuPage() {
           <SettingsRow
             icon={<SettingsIconStore />}
             title="Open provider dashboard"
-            subtitle="Overview, rental, listings, and services"
-            to="/provider"
+            subtitle="Opens after admin approves your KYC"
+            onClick={() => {
+              void openProvider();
+            }}
             showDivider={false}
           />
         </SettingsSection>

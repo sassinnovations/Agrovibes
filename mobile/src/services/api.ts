@@ -2326,6 +2326,7 @@ export async function fetchSocialNotifications(token: string) {
     postComments?: SocialPostActivityNotification[];
     liveStarts?: SocialPostActivityNotification[];
     weatherAlerts?: SocialPostActivityNotification[];
+    providerUpdates?: SocialPostActivityNotification[];
     unreadCount: number;
   };
 }

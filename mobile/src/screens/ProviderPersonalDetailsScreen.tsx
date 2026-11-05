@@ -142,6 +142,7 @@ export function ProviderPersonalDetailsScreen() {
     : fullName.trim().length > 1 &&
       phone.trim().length >= 10 &&
       phoneVerified &&
+      isValidEmail(email) &&
       street.trim().length > 0 &&
       village.trim().length > 0 &&
       district.trim().length > 0 &&
