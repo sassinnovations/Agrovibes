@@ -25,6 +25,7 @@ import {
   type MarketSubCategory
 } from "../components/market/listing/marketCategoryListingConfig";
 import type { MarketStackParamList } from "../navigation/MarketStackNavigator";
+import { fetchMarketplaceListings, type MarketplaceListing } from "../services/api";
 import {
   APP_BLACK,
   APP_LIME,
@@ -46,6 +47,34 @@ const BACK_ICON = require("../../assets/market/back-icon.png");
 
 function rupee(n: number) {
   return "\u20B9" + Math.round(n).toLocaleString("en-IN");
+}
+
+function listingMatchesCategory(row: MarketplaceListing, categoryId: string, title: string) {
+  const text = `${row.cropName} ${row.district} ${row.listingType || ""}`.toLowerCase();
+  const id = categoryId.toLowerCase();
+  if (id && text.includes(id)) return true;
+  const words = title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 3);
+  return words.some((word) => text.includes(word));
+}
+
+function toMarketProduct(row: MarketplaceListing, subCategoryId: string): MarketListingProduct {
+  return {
+    id: String(row.id),
+    subCategoryId,
+    title: row.cropName,
+    subtitle: row.district || "Approved listing",
+    rating: 0,
+    reviewLabel: "New",
+    eta: "Approved",
+    weights: [],
+    discountPct: 0,
+    price: Number(row.pricePerKg) || 0,
+    mrp: Number(row.pricePerKg) || 0,
+    unitPrice: Number(row.pricePerKg) || 0
+  };
 }
 
 function SidebarSubCategoryItem({
@@ -92,12 +121,16 @@ function ProductCard({ product }: { product: MarketListingProduct }) {
       </View>
 
       <View style={styles.ratingRow}>
-        <Ionicons name="star" size={12} color={APP_LIME} />
-        <Text style={styles.ratingText}>
-          {product.rating} | {product.reviewLabel}
-        </Text>
-        <Text style={styles.etaDot}>{"\u2022"}</Text>
-        <Text style={styles.etaText}>{product.eta}</Text>
+        {product.rating > 0 ? (
+          <>
+            <Ionicons name="star" size={12} color={APP_LIME} />
+            <Text style={styles.ratingText}>
+              {product.rating} | {product.reviewLabel}
+            </Text>
+            <Text style={styles.etaDot}>{"\u2022"}</Text>
+          </>
+        ) : null}
+        <Text style={styles.etaText}>{product.eta || "Approved"}</Text>
       </View>
 
       <Text style={styles.productTitle} numberOfLines={1}>
@@ -113,28 +146,36 @@ function ProductCard({ product }: { product: MarketListingProduct }) {
         </View>
       ) : null}
 
-      <View style={styles.weightRow}>
-        {product.weights.map((w) => {
-          const on = w === weight;
-          return (
-            <Pressable
-              key={w}
-              style={[styles.weightPill, on ? styles.weightPillOn : null]}
-              onPress={() => setWeight(w)}
-            >
-              <Text style={[styles.weightText, on ? styles.weightTextOn : null]}>{w}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {product.weights.length > 0 ? (
+        <View style={styles.weightRow}>
+          {product.weights.map((w) => {
+            const on = w === weight;
+            return (
+              <Pressable
+                key={w}
+                style={[styles.weightPill, on ? styles.weightPillOn : null]}
+                onPress={() => setWeight(w)}
+              >
+                <Text style={[styles.weightText, on ? styles.weightTextOn : null]}>{w}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
 
       <View style={styles.priceBlock}>
-        <Text style={styles.discountLabel}>{product.discountPct}% OFF</Text>
-        <View style={styles.priceRow}>
-          <Text style={styles.price}>{rupee(product.price)}</Text>
-          <Text style={styles.mrp}>{rupee(product.mrp)}</Text>
-        </View>
-        <Text style={styles.unitPrice}>{rupee(product.unitPrice)}/Unit</Text>
+        {product.price > 0 ? (
+          <>
+            {product.discountPct > 0 ? <Text style={styles.discountLabel}>{product.discountPct}% OFF</Text> : null}
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>{rupee(product.price)}</Text>
+              {product.mrp > product.price ? <Text style={styles.mrp}>{rupee(product.mrp)}</Text> : null}
+            </View>
+            <Text style={styles.unitPrice}>{rupee(product.unitPrice)}/Unit</Text>
+          </>
+        ) : (
+          <Text style={styles.price}>Rate on request</Text>
+        )}
       </View>
     </View>
   );
@@ -153,6 +194,7 @@ export function MarketCategoryListingScreen() {
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [filterSheetFocus, setFilterSheetFocus] = useState(config.filters[0] ?? "Category Type");
   const [selectedFilters, setSelectedFilters] = useState<Record<string, FilterSelectionValue>>({});
+  const [liveProducts, setLiveProducts] = useState<MarketListingProduct[] | null>(null);
   const mainWidth = windowWidth - SIDEBAR_W;
   const gridPad = 8;
   const gridGap = 8;
@@ -165,15 +207,32 @@ export function MarketCategoryListingScreen() {
     setSelectedFilters({});
   }, [config.categoryId, config.subCategories, config.filters]);
 
+  useEffect(() => {
+    let active = true;
+    setLiveProducts(null);
+    const subCategoryId = config.subCategories[0]?.id ?? "all";
+    void fetchMarketplaceListings()
+      .then((data) => {
+        if (!active) return;
+        const matched = (data.listings || [])
+          .filter((row) => listingMatchesCategory(row, config.categoryId, config.title))
+          .map((row) => toMarketProduct(row, subCategoryId));
+        setLiveProducts(matched);
+      })
+      .catch(() => {
+        if (active) setLiveProducts([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [config.categoryId, config.title, config.subCategories]);
+
   const openFilterSheet = (focusFilter?: string) => {
     setFilterSheetFocus(focusFilter ?? config.filters[0] ?? "Category Type");
     setFilterSheetOpen(true);
   };
 
-  const products = useMemo(
-    () => config.products.filter((p) => p.subCategoryId === activeSub),
-    [config.products, activeSub]
-  );
+  const products = useMemo(() => liveProducts ?? [], [liveProducts]);
 
   const listingRows = useMemo(
     () => buildCategoryListingRows(products, config.inlineAdsEvery),
@@ -248,7 +307,11 @@ export function MarketCategoryListingScreen() {
               );
             }}
             ListEmptyComponent={
-              <Text style={styles.emptyText}>No products in this sub-category yet.</Text>
+              <Text style={styles.emptyText}>
+                {liveProducts == null
+                  ? "Loading approved listings…"
+                  : "No approved listings in this category yet. A listing shows here after admin approves it."}
+              </Text>
             }
             ListFooterComponent={
               config.showWelcomeFooter ? (

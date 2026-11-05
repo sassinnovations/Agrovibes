@@ -102,7 +102,10 @@ const SOCIAL_NOTIF_SOCKET_TYPES = new Set([
   "live_start",
   "live_scheduled",
   "live_reminder",
-  "live_host_reminder"
+  "live_host_reminder",
+  "provider_kyc_submitted",
+  "provider_kyc_approved",
+  "provider_kyc_rejected"
 ]);
 
 function fireSocialPush(payload) {
@@ -616,8 +619,48 @@ function normalizeKycDocuments(raw) {
   return out;
 }
 
-async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role) {
+function isDeliverableUserEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!looksLikeEmail(email)) return false;
+  if (email.endsWith("@phone.agrovibes")) return false;
+  return email;
+}
+
+async function emailUser({ to, subject, text }) {
+  const address = isDeliverableUserEmail(to);
+  if (!address) return false;
+  try {
+    const sent = await sendResendEmail({ to: address, subject, text });
+    if (sent) return true;
+  } catch (error) {
+    console.warn("[kyc] resend to applicant failed:", error?.message || error);
+  }
+  const formBody = new URLSearchParams({
+    name: "CropVibe",
+    email: "noreply@cropvibe.com",
+    _subject: subject,
+    message: text,
+    _template: "table",
+    _captcha: "false",
+    _honey: ""
+  });
+  const formResp = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(address)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json"
+    },
+    body: formBody
+  });
+  if (!formResp.ok) return false;
+  return true;
+}
+
+async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role, details = {}) {
   await ensureSocialNotificationsTable();
+  const name = String(applicantName || "A provider").trim() || "A provider";
+  const roleLabel = String(role || "provider").trim() || "provider";
+  const excerpt = `${name} submitted provider KYC and is waiting for review.`;
   const admins = await query(
     `
     SELECT id
@@ -627,12 +670,6 @@ async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role)
     LIMIT 50
     `
   );
-  const excerpt = JSON.stringify({
-    kind: "provider_kyc",
-    submissionId,
-    applicantName: String(applicantName || "").slice(0, 120),
-    role: String(role || "rental")
-  });
   for (const admin of admins.rows) {
     if (Number(admin.id) === Number(actorId)) continue;
     await query(
@@ -644,14 +681,85 @@ async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role)
     );
     fireSocialPush({
       userId: admin.id,
-      title: "New KYC submission",
-      body: `${applicantName || "A provider"} submitted KYC for ${role || "provider"} approval.`,
-      data: {
-        type: "provider_kyc_submitted",
-        submissionId: String(submissionId)
-      }
+      type: "provider_kyc_submitted",
+      actorName: name,
+      commentExcerpt: excerpt
     });
   }
+  try {
+    const adminUrl = String(process.env.ADMIN_APP_ORIGIN || "https://admin.cropvibe.com").replace(/\/$/, "");
+    const reply = isDeliverableUserEmail(details.email) || undefined;
+    const subject = `New provider KYC: ${name}`;
+    const text = [
+      "A user finished KYC and is waiting for admin verification.",
+      "",
+      `Name: ${name}`,
+      `Role: ${roleLabel}`,
+      `Phone: ${String(details.phone || "").trim() || "-"}`,
+      `Email: ${reply || "-"}`,
+      `Submission: #${submissionId}`,
+      "",
+      `Review it in KYC Verification: ${adminUrl}/kyc-verification`
+    ].join("\n");
+    let sent = false;
+    try {
+      sent = await sendResendEmail({
+        to: "info@cropvibe.com",
+        subject,
+        text,
+        replyTo: reply
+      });
+    } catch (error) {
+      console.warn("[kyc] admin resend failed:", error?.message || error);
+    }
+    if (!sent) {
+      await emailUser({ to: "info@cropvibe.com", subject, text });
+    }
+  } catch (error) {
+    console.warn("[kyc] admin email failed:", error?.message || error);
+  }
+}
+
+async function notifyApplicantOfKycDecision({ userId, submissionId, status, adminNote }) {
+  const approved = status === "approved";
+  const message = approved
+    ? "Admin approved your provider registration. You can add listings now."
+    : "Admin rejected your provider registration. Review the details and submit again.";
+  const kycRes = await query(
+    `
+    SELECT applicant_name AS "applicantName", email
+    FROM provider_kyc_submissions
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [submissionId]
+  );
+  const person = kycRes.rows[0] || {};
+  const to = isDeliverableUserEmail(person.email);
+  const name = String(person.applicantName || "there").trim() || "there";
+  const note = String(adminNote || "").trim();
+  if (to) {
+    try {
+      await emailUser({
+        to,
+        subject: approved
+          ? "Your CropVibe provider application was approved"
+          : "Your CropVibe provider application was rejected",
+        text: approved
+          ? `Hello ${name},\n\nAdmin approved your provider registration. Open CropVibe and start adding your listings.\n`
+          : `Hello ${name},\n\nAdmin rejected your provider registration.${note ? `\n\nNote: ${note}` : ""}\n\nOpen Join as Provider in CropVibe to review and submit again.\n`
+      });
+    } catch (error) {
+      console.warn("[kyc] applicant email failed:", error?.message || error);
+    }
+  }
+  fireSocialPush({
+    userId,
+    type: approved ? "provider_kyc_approved" : "provider_kyc_rejected",
+    actorName: "CropVibe",
+    commentExcerpt: message
+  });
+  return message;
 }
 
 function liveScheduleExcerpt(topic, scheduledAt) {
@@ -5649,6 +5757,12 @@ router.get("/v1/social/notifications", authRequired, async (req, res) => {
         r.type === "live_host_reminder"
     );
     const weatherAlerts = result.rows.filter((r) => r.type === "weather_alert");
+    const providerUpdates = result.rows.filter(
+      (r) =>
+        r.type === "provider_kyc_submitted" ||
+        r.type === "provider_kyc_approved" ||
+        r.type === "provider_kyc_rejected"
+    );
     // Expire abandoned live_start posts so notifications don't keep showing "Join live".
     const staleLivePostIds = [];
     for (const row of liveStarts) {
@@ -5687,7 +5801,10 @@ router.get("/v1/social/notifications", authRequired, async (req, res) => {
         r.type === "live_scheduled" ||
         r.type === "live_reminder" ||
         r.type === "live_host_reminder" ||
-        r.type === "weather_alert"
+        r.type === "weather_alert" ||
+        r.type === "provider_kyc_submitted" ||
+        r.type === "provider_kyc_approved" ||
+        r.type === "provider_kyc_rejected"
       );
     }).length;
     res.json({
@@ -5698,6 +5815,7 @@ router.get("/v1/social/notifications", authRequired, async (req, res) => {
       postComments,
       liveStarts,
       weatherAlerts,
+      providerUpdates,
       unreadCount
     });
   } catch (error) {
@@ -6480,33 +6598,35 @@ router.delete("/v1/messages/:messageId", authRequired, async (req, res) => {
   }
 });
 
+const MARKETPLACE_LISTINGS_CACHE_KEY = "v1:marketplace:listings";
+
 router.get("/v1/marketplace/listings", async (_req, res) => {
   try {
-    const cacheKey = "v1:marketplace:listings";
-    const cached = await cacheGetJson(cacheKey);
-    if (cached && Array.isArray(cached.listings)) {
-      res.json(cached);
-      return;
-    }
+    await cacheDel(MARKETPLACE_LISTINGS_CACHE_KEY);
+    await ensureProviderListingsTable();
     const result = await query(
       `
       SELECT
         l.id,
-        l.crop_name AS "cropName",
-        COALESCE(d.name, 'Unknown') AS district,
-        l.price_per_kg AS "pricePerKg",
-        l.verified_only AS "verifiedOnly",
-        'produce' AS "listingType"
-      FROM listings l
-      LEFT JOIN districts d ON d.id = l.district_id
+        l.title AS "cropName",
+        COALESCE(NULLIF(u.full_name, ''), NULLIF(l.category, ''), l.channel, 'Provider') AS district,
+        0::numeric AS "pricePerKg",
+        true AS "verifiedOnly",
+        CASE
+          WHEN lower(COALESCE(l.channel, '')) IN ('services', 'service') THEN 'services'
+          WHEN lower(COALESCE(l.channel, '')) IN ('educators', 'education') THEN 'knowledge'
+          WHEN lower(COALESCE(l.channel, '')) = 'rental' THEN 'machinery'
+          ELSE 'produce'
+        END AS "listingType"
+      FROM provider_listings l
+      LEFT JOIN learn_users u ON u.id = l.user_id
+      WHERE lower(COALESCE(l.status, '')) = 'approved'
       ORDER BY l.created_at DESC
-      LIMIT 30
+      LIMIT 100
       `
     );
 
-    const body = { listings: result.rows };
-    res.json(body);
-    await cacheSetJson(cacheKey, body, 90);
+    res.json({ listings: result.rows });
   } catch (error) {
     res.json({
       listings: [],
@@ -11072,7 +11192,7 @@ async function queueVerifiedProviderApplication(req, userId, identity, bank) {
   );
   const submissionId = inserted.rows[0]?.id;
   try {
-    await notifyAdminUsersOfKyc(userId, submissionId, applicantName, role);
+    await notifyAdminUsersOfKyc(userId, submissionId, applicantName, role, { phone, email });
   } catch (notifyError) {
     console.warn("[kyc] admin notify failed:", notifyError?.message || notifyError);
   }
@@ -11316,7 +11436,11 @@ router.post("/v1/provider/kyc/submit", authRequired, async (req, res) => {
       res.status(400).json({ message: "Enter a valid GST number" });
       return;
     }
-    const email = String(req.body?.email || "").trim().toLowerCase().slice(0, 160) || null;
+    const email = isDeliverableUserEmail(req.body?.email);
+    if (!email) {
+      res.status(400).json({ message: "Enter a valid email on the basic details form." });
+      return;
+    }
     const phone = normalizeIndiaPhone(req.body?.phone) || String(req.body?.phone || "").trim().slice(0, 40) || null;
     await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS provider_phone TEXT`);
     await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS provider_phone_verified_at TIMESTAMPTZ`);
@@ -11403,7 +11527,7 @@ router.post("/v1/provider/kyc/submit", authRequired, async (req, res) => {
 
     const row = inserted.rows[0];
     try {
-      await notifyAdminUsersOfKyc(userId, row.id, applicantName, role);
+      await notifyAdminUsersOfKyc(userId, row.id, applicantName, role, { phone, email });
     } catch (notifyError) {
       console.warn("[kyc] admin notify failed:", notifyError?.message || notifyError);
     }
@@ -11614,6 +11738,22 @@ router.post("/v1/provider/listings", authRequired, async (req, res) => {
       res.status(400).json({ message: "Enter the listing name." });
       return;
     }
+    await ensureProviderKycTable();
+    const approvedKyc = await query(
+      `
+      SELECT id
+      FROM provider_kyc_submissions
+      WHERE user_id = $1 AND status = 'approved'
+      LIMIT 1
+      `,
+      [userId]
+    );
+    if (!approvedKyc.rows[0]) {
+      res.status(403).json({
+        message: "Admin must approve your provider registration before you can add listings."
+      });
+      return;
+    }
     await ensureProviderListingsTable();
     const inserted = await query(
       `
@@ -11646,10 +11786,8 @@ router.get("/v1/rentals/listings", authOptional, async (req, res) => {
         COALESCE(u.full_name, 'Provider') AS "providerName"
       FROM provider_listings l
       LEFT JOIN learn_users u ON u.id = l.user_id
-      WHERE l.channel IN ('Rental', 'Services')
-        AND l.status <> 'unpublished'
-        AND l.status <> 'rejected'
-        AND (l.status = 'approved' OR l.user_id = $1)
+      WHERE lower(COALESCE(l.status, '')) NOT IN ('unpublished', 'rejected')
+        AND (lower(COALESCE(l.status, '')) = 'approved' OR l.user_id = $1)
       ORDER BY l.created_at DESC
       LIMIT 100
       `,
@@ -11878,6 +12016,7 @@ router.post("/v1/admin/listings/:id/respond", authRequired, requireRole("admin")
       res.status(404).json({ message: "Listing not found" });
       return;
     }
+    await cacheDel(MARKETPLACE_LISTINGS_CACHE_KEY);
     res.json({ listing: { id: listingId, status: adminListingStatus(status) } });
   } catch (error) {
     res.status(500).json({ message: "Failed to update listing", error: error?.message || String(error) });
@@ -11974,6 +12113,12 @@ router.post("/v1/admin/kyc/:id/respond", authRequired, requireRole("admin"), asy
       return;
     }
     const row = updated.rows[0];
+    const message = await notifyApplicantOfKycDecision({
+      userId: row.userId,
+      submissionId: row.id,
+      status: nextStatus,
+      adminNote
+    });
     await query(
       `
       INSERT INTO social_notifications (user_id, actor_id, type, is_read, comment_excerpt)
@@ -11983,25 +12128,9 @@ router.post("/v1/admin/kyc/:id/respond", authRequired, requireRole("admin"), asy
         row.userId,
         adminUserId,
         nextStatus === "approved" ? "provider_kyc_approved" : "provider_kyc_rejected",
-        JSON.stringify({
-          kind: "provider_kyc",
-          submissionId: row.id,
-          status: nextStatus
-        })
+        message
       ]
     );
-    fireSocialPush({
-      userId: row.userId,
-      title: nextStatus === "approved" ? "KYC Approved" : "KYC Rejected",
-      body:
-        nextStatus === "approved"
-          ? "Admin approved your provider registration. You can start your business."
-          : "Admin rejected your provider KYC. Please review and resubmit.",
-      data: {
-        type: nextStatus === "approved" ? "provider_kyc_approved" : "provider_kyc_rejected",
-        submissionId: String(row.id)
-      }
-    });
     res.json({ submission: row });
   } catch (error) {
     res.status(500).json({ message: "Failed to update KYC submission", error: error?.message || String(error) });

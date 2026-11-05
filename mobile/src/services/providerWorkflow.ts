@@ -295,6 +295,9 @@ export async function submitProviderRegistrationForApproval(token?: string | nul
   if (!draft?.phoneOtpVerified) {
     throw new Error("Verify the mobile number with OTP before submitting.");
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(draft?.email || "").trim())) {
+    throw new Error("Enter the email from your basic details.");
+  }
   if (!draft?.digilockerVerified) {
     throw new Error("Verify Aadhaar with DigiLocker before submitting.");
   }

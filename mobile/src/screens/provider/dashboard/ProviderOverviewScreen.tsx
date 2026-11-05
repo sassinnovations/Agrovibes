@@ -12,7 +12,7 @@ import {
   type ProviderApprovalStatus,
   type ProviderRegistrationDraft
 } from "../../../services/providerWorkflow";
-import { APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../../../theme/appColors";
+import { navigateToHome } from "../../../navigation/navigationRef";
 
 type Step = {
   title: string;
@@ -108,7 +108,18 @@ export function ProviderOverviewScreen() {
       <ProviderChromeHeader />
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={styles.title}>Provider setup</Text>
-        <Text style={styles.sub}>Registration, then the dashboard. The bank account is added once on this dashboard.</Text>
+        <Text style={styles.sub}>
+          {status === "pending"
+            ? "Admin is reviewing your KYC. Use the CropVibe feed until you get an approval or rejection notification."
+            : status === "rejected"
+              ? "Admin rejected this application. Review it and submit again. Listings stay closed until it is approved."
+              : "Registration, then the dashboard. The bank account is added once on this dashboard."}
+        </Text>
+        {status === "pending" || status === "rejected" || status === "not_submitted" ? (
+          <Pressable style={styles.card} onPress={navigateToHome}>
+            <Text style={styles.title}>Back to CropVibe feed</Text>
+          </Pressable>
+        ) : null}
         {steps.map((step, index) => {
           const locked = steps.slice(0, index).some((item) => !item.done);
           return (

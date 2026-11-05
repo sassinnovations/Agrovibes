@@ -197,8 +197,8 @@ export function ProviderOverviewPage() {
       ))}
 
       {!approved ? (
-        <Link className="provider-flow__link" to="/provider/join">
-          {status === "pending" ? "Registration is with admin" : "Continue registration"}
+        <Link className="provider-flow__link" to={status === "pending" ? "/" : "/provider/join"}>
+          {status === "pending" ? "Back to CropVibe feed" : status === "rejected" ? "Review and submit again" : "Continue registration"}
         </Link>
       ) : (
         <Link className="provider-flow__link" to="/provider/listings/new">

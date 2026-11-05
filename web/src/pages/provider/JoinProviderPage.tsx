@@ -197,6 +197,7 @@ export function JoinProviderPage() {
     : draft.fullName.trim().length > 1 &&
       draft.phone.trim().length >= 10 &&
       draft.phoneOtpVerified &&
+      isValidEmail(draft.email) &&
       draft.street.trim().length > 0 &&
       draft.village.trim().length > 0 &&
       draft.district.trim().length > 0 &&
@@ -360,6 +361,10 @@ export function JoinProviderPage() {
     if (!token || busy) return;
     if (!draft.digilockerVerified) {
       setError("Verify Aadhaar with DigiLocker before submitting.");
+      return;
+    }
+    if (!isValidEmail(draft.email)) {
+      setError("Enter the email from your basic details.");
       return;
     }
     if (draft.gstNumber.trim() && !gstOk(draft.gstNumber)) {
@@ -831,9 +836,12 @@ export function JoinProviderPage() {
         {step === "done" ? (
           <section className="join-card">
             <h2>Submitted For Approval</h2>
-            <p>Admin has been notified. Your KYC will appear in Admin → KYC Verification for approval.</p>
-            <button type="button" className="join-btn" onClick={() => navigate("/settings")}>
-              Back to settings
+            <p>
+              Your application is with admin. We emailed the admin team. Stay on the CropVibe feed until you get an
+              approval or rejection notification. After approval you can add listings.
+            </p>
+            <button type="button" className="join-btn" onClick={() => navigate("/")}>
+              Go to CropVibe feed
             </button>
           </section>
         ) : null}

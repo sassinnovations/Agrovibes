@@ -1,15 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../auth/AuthContext";
 import type { RootStackParamList } from "../../navigation/rootStackTypes";
+import { fetchRentalListings } from "../../services/api";
 import { navigateToRentalCart, navigateToRentalCategory } from "../../navigation/navigationRef";
 import { useAndroidNestedStackBack } from "../../navigation/useAndroidScreenBack";
 import { APP_BLACK, APP_LIME, APP_SURFACE, APP_TEXT, APP_TEXT_MUTED, APP_TEXT_ON_LIME } from "../../theme/appColors";
-import { RENTAL_CATEGORIES, rentalCategoryById } from "./rentalCategories";
-import { catalogForCategory, RENTAL_CATALOG_SUBS, type RentalCatalogItem, type RentalCatalogSub } from "./rentalCatalog";
+import { portalCategoryForListing, RENTAL_CATEGORIES, rentalCategoryById } from "./rentalCategories";
+import { RENTAL_CATALOG_SUBS, type RentalCatalogItem, type RentalCatalogSub } from "./rentalCatalog";
 import { addRentalCartLine, setRentalCartLine } from "./rentalCart";
 
 const BACK_ICON = require("../../../assets/market/back-icon.png");
@@ -36,11 +38,43 @@ function rupee(n: number) {
 }
 
 function unitPrice(item: RentalCatalogItem) {
+  if (item.price <= 0) return "Rate on request";
   return `${rupee(Math.max(1, Math.round(item.price / 10)))}/${item.unitLabel}`;
+}
+
+function liveListingToCatalog(row: {
+  id: string | number;
+  title: string;
+  category: string;
+  channel: string;
+  providerName?: string;
+}): RentalCatalogItem {
+  const categoryId = portalCategoryForListing(row.category, row.title);
+  const cover = RENTAL_CATALOG_SUBS[categoryId]?.[0];
+  const provider = row.providerName?.trim();
+  return {
+    id: String(row.id),
+    categoryId,
+    subCategoryId: cover?.id ?? "all",
+    title: row.title,
+    subtitle: [row.category, row.channel, provider].filter(Boolean).join(" · "),
+    detail: `${row.title} is an approved Cropvibe listing.`,
+    rating: 0,
+    reviewLabel: "New",
+    eta: "Approved",
+    tag: "Approved",
+    options: ["Book"],
+    discountPct: 0,
+    price: 0,
+    mrp: 0,
+    unitLabel: "Booking",
+    image: cover?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image
+  };
 }
 
 export function RentalCategoryScreen() {
   useAndroidNestedStackBack();
+  const { token } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "RentalCategory">>();
   const location = route.params?.location || "Telangana";
@@ -51,6 +85,30 @@ export function RentalCategoryScreen() {
   const [selected, setSelected] = useState<RentalCatalogItem | null>(null);
   const [option, setOption] = useState("");
   const [quantity, setQuantity] = useState(0);
+  const [liveItems, setLiveItems] = useState<RentalCatalogItem[]>([]);
+  const [loadingLive, setLoadingLive] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setLoadingLive(true);
+      void fetchRentalListings(token)
+        .then((data) => {
+          if (!active) return;
+          const approved = (data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved");
+          setLiveItems(approved.map(liveListingToCatalog));
+        })
+        .catch(() => {
+          if (active) setLiveItems([]);
+        })
+        .finally(() => {
+          if (active) setLoadingLive(false);
+        });
+      return () => {
+        active = false;
+      };
+    }, [token])
+  );
 
   useEffect(() => {
     setActiveSub(subs[0]?.id ?? "");
@@ -59,8 +117,8 @@ export function RentalCategoryScreen() {
 
   const items = useMemo(() => {
     if (!category) return [];
-    return catalogForCategory(category.id).filter((item) => item.subCategoryId === activeSub);
-  }, [activeSub, category]);
+    return liveItems.filter((item) => item.categoryId === category.id);
+  }, [category, liveItems]);
 
   const mainWidth = width - SIDEBAR_W;
   const cardWidth = Math.floor((mainWidth - 16 - 8) / 2);
@@ -133,6 +191,12 @@ export function RentalCategoryScreen() {
             ))}
           </ScrollView>
           <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
+            {loadingLive ? <Text style={styles.emptyLive}>Loading approved listings…</Text> : null}
+            {!loadingLive && items.length === 0 ? (
+              <Text style={styles.emptyLive}>
+                No approved listings in this category yet. A listing shows here after admin approves it.
+              </Text>
+            ) : null}
             {rows.map((row) => (
               <View key={row.id} style={styles.gridRow}>
                 <View style={{ width: cardWidth }}>
@@ -213,12 +277,16 @@ function RentalCard({
         </Pressable>
       </View>
       <View style={styles.ratingRow}>
-        <Ionicons name="star" size={12} color={APP_LIME} />
-        <Text style={styles.ratingText}>
-          {item.rating} | {item.reviewLabel}
-        </Text>
-        <Text style={styles.etaDot}>{"\u2022"}</Text>
-        <Text style={styles.eta}>{item.eta}</Text>
+        {item.rating > 0 ? (
+          <>
+            <Ionicons name="star" size={12} color={APP_LIME} />
+            <Text style={styles.ratingText}>
+              {item.rating} | {item.reviewLabel}
+            </Text>
+            <Text style={styles.etaDot}>{"\u2022"}</Text>
+          </>
+        ) : null}
+        <Text style={styles.eta}>{item.eta || "Approved"}</Text>
       </View>
       <Text style={styles.cardTitle} numberOfLines={1}>
         {item.title}
@@ -242,12 +310,12 @@ function RentalCard({
         })}
       </View>
       <View style={styles.priceBlock}>
-        {item.discountPct > 0 ? <Text style={styles.discount}>{item.discountPct}% OFF</Text> : null}
+        {item.price > 0 && item.discountPct > 0 ? <Text style={styles.discount}>{item.discountPct}% OFF</Text> : null}
         <View style={styles.priceRow}>
-          <Text style={styles.price}>{rupee(item.price)}</Text>
-          {item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
+          <Text style={styles.price}>{item.price > 0 ? rupee(item.price) : "Rate on request"}</Text>
+          {item.price > 0 && item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
         </View>
-        <Text style={styles.unit}>{unitPrice(item)}</Text>
+        {item.price > 0 ? <Text style={styles.unit}>{unitPrice(item)}</Text> : null}
       </View>
     </Pressable>
   );
@@ -311,12 +379,14 @@ function RentalSheet({
                   );
                 })}
                 <View style={styles.sheetPriceSide}>
-                  {item.discountPct > 0 ? <Text style={styles.discount}>{item.discountPct}% OFF</Text> : null}
+                  {item.price > 0 && item.discountPct > 0 ? (
+                    <Text style={styles.discount}>{item.discountPct}% OFF</Text>
+                  ) : null}
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>{rupee(item.price)}</Text>
-                    {item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
+                    <Text style={styles.price}>{item.price > 0 ? rupee(item.price) : "Rate on request"}</Text>
+                    {item.price > 0 && item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
                   </View>
-                  <Text style={styles.unit}>{unitPrice(item)}</Text>
+                  {item.price > 0 ? <Text style={styles.unit}>{unitPrice(item)}</Text> : null}
                 </View>
                 {count > 0 ? (
                   <View style={styles.stepper}>
@@ -387,6 +457,7 @@ const styles = StyleSheet.create({
   sideLabelOn: { color: APP_LIME },
   sideImage: { width: 58, height: 46, marginTop: 4 },
   grid: { paddingHorizontal: 8, paddingBottom: 28 },
+  emptyLive: { color: APP_TEXT_MUTED, fontSize: 13, lineHeight: 18, padding: 16 },
   gridRow: { flexDirection: "row", justifyContent: "space-between", gap: 8, marginBottom: 8 },
   card: { backgroundColor: TILE_BG, borderRadius: 12, padding: 8 },
   media: { height: 110, borderRadius: 10, overflow: "hidden", marginBottom: 8, backgroundColor: "#173024" },

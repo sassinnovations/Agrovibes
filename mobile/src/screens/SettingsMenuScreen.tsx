@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../auth/AuthContext";
+import { syncProviderRegistrationFromApi } from "../services/providerWorkflow";
 import { useLanguage } from "../localization/LanguageContext";
 import { APP_BLACK, APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../theme/appColors";
 import { AccountCenterBottomSheet } from "../components/accountCenter/AccountCenterBottomSheet";
@@ -138,7 +139,7 @@ function PromoCard({ onPress }: { onPress?: () => void }) {
 export function SettingsMenuScreen() {
   useAndroidNestedStackBack();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { signOut } = useAuth();
+  const { signOut, token } = useAuth();
   const { t, language } = useLanguage();
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
 
@@ -302,8 +303,27 @@ export function SettingsMenuScreen() {
           <SettingsRow
             icon="storefront-outline"
             title="Open provider dashboard"
-            subtitle="Overview, rental, listings, and services"
-            onPress={() => navigation.navigate("ProviderMain")}
+            subtitle="Available after admin approves your KYC"
+            onPress={() => {
+              void (async () => {
+                const status = await syncProviderRegistrationFromApi(token).catch(() => "not_submitted" as const);
+                if (status === "approved") {
+                  navigation.navigate("ProviderMain");
+                  return;
+                }
+                if (status === "rejected") {
+                  navigation.navigate("ProviderOnboarding");
+                  return;
+                }
+                Alert.alert(
+                  status === "pending" ? "Waiting for admin" : "Provider registration",
+                  status === "pending"
+                    ? "Your application is with admin. Stay on the CropVibe feed until you get an approval or rejection notification."
+                    : "Finish Join as Provider first. After you submit, admin reviews it before listings open."
+                );
+                if (status !== "pending") navigation.navigate("ProviderOnboarding");
+              })();
+            }}
             showDivider={false}
           />
         </SettingsSection>
