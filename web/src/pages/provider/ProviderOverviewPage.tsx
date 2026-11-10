@@ -200,11 +200,7 @@ export function ProviderOverviewPage() {
         <Link className="provider-flow__link" to={status === "pending" ? "/" : "/provider/join"}>
           {status === "pending" ? "Back to CropVibe feed" : status === "rejected" ? "Review and submit again" : "Continue registration"}
         </Link>
-      ) : (
-        <Link className="provider-flow__link" to="/provider/listings/new">
-          Add tractor or equipment
-        </Link>
-      )}
+      ) : null}
 
       {approved && !payoutReady ? (
         <form

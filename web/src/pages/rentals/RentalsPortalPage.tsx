@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { featuredRentalCategories, RENTAL_CATEGORIES, RENTAL_LOCATIONS } from "./rentalCatalog";
+import { useAuth } from "../../auth/AuthContext";
+import { fetchPublicRentals, type PublicRentalListing } from "../../api/rentals";
+import { featuredRentalCategories, portalCategoryForListing, RENTAL_CATEGORIES, RENTAL_LOCATIONS } from "./rentalCatalog";
 import "./RentalsPortal.css";
 
 const BANNERS = [
@@ -35,9 +37,11 @@ const BANNERS = [
 ];
 
 export function RentalsPortalPage() {
+  const { token } = useAuth();
   const [location, setLocation] = useState("Add location");
   const [locationOpen, setLocationOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [listings, setListings] = useState<PublicRentalListing[]>([]);
   const categories = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const source = needle
@@ -45,6 +49,27 @@ export function RentalsPortalPage() {
       : featuredRentalCategories();
     return source;
   }, [query]);
+
+  useEffect(() => {
+    let active = true;
+    fetchPublicRentals(token)
+      .then((data) => {
+        if (!active) return;
+        setListings((data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved"));
+      })
+      .catch(() => {
+        if (active) setListings([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  const visibleListings = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return listings;
+    return listings.filter((row) => `${row.title} ${row.category} ${row.providerName}`.toLowerCase().includes(needle));
+  }, [listings, query]);
 
   return (
     <section className="rentals-portal">
@@ -113,6 +138,29 @@ export function RentalsPortalPage() {
           </Link>
         ))}
       </div>
+
+      <div className="rentals-section-head">
+        <h2>Approved rentals</h2>
+      </div>
+      {visibleListings.length === 0 ? (
+        <p className="rentals-note">No approved provider listings yet. A listing shows here after admin approves it.</p>
+      ) : (
+        <div className="rentals-list">
+          {visibleListings.map((row) => (
+            <Link
+              key={row.id}
+              className="rentals-card"
+              to={`/rentals/${portalCategoryForListing(row.category, row.title)}?location=${encodeURIComponent(location)}`}
+            >
+              <strong>{row.title}</strong>
+              <p>
+                {row.providerName}
+                {row.category ? ` · ${row.category}` : ""}
+              </p>
+            </Link>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

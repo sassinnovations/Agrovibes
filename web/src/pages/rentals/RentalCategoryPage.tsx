@@ -85,6 +85,15 @@ export function RentalCategoryPage() {
               <p>{item.blurb}</p>
             </Link>
           ))}
+          {listings.map((row) => (
+            <article key={row.id} className="rentals-card">
+              <strong>{row.title}</strong>
+              <p>
+                {row.providerName}
+                {row.category ? ` · ${row.category}` : ""}
+              </p>
+            </article>
+          ))}
         </div>
       ) : (
         <div className="rentals-list">
