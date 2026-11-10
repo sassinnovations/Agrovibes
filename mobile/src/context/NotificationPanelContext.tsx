@@ -949,12 +949,43 @@ export function NotificationPanelProvider({ children }: { children: React.ReactN
     return t("notifLikedYour", { name: String(n.actorName || ""), kind });
   };
 
+  const readableProviderUpdate = (n: any) => {
+    const raw = String(n?.commentExcerpt || "").trim();
+    let status = "";
+    if (raw.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(raw) as { kind?: string; status?: string };
+        if (parsed?.kind === "provider_kyc") status = String(parsed.status || "").toLowerCase();
+      } catch {
+        status = "";
+      }
+    }
+    const note = raw.startsWith("{") ? "" : raw;
+    const type = String(n?.type || "");
+    if (type === "provider_kyc_approved" || status === "approved") {
+      return note || "Admin approved your provider registration. You can add listings now.";
+    }
+    if (type === "provider_kyc_rejected" || status === "rejected") {
+      return note || "Admin rejected your provider registration. You can review and submit again.";
+    }
+    if (type === "provider_kyc_submitted" || status === "submitted") {
+      return note || "A provider submitted KYC and is waiting for review.";
+    }
+    return note || "Provider application update";
+  };
+
   const liveStartLabel = (n: any) => {
-    if (n.type === "provider_kyc_approved" || n.type === "provider_kyc_rejected" || n.type === "provider_kyc_submitted") {
-      return String(n.commentExcerpt || "").trim() || "Provider application update";
+    if (
+      n.type === "provider_kyc_approved" ||
+      n.type === "provider_kyc_rejected" ||
+      n.type === "provider_kyc_submitted" ||
+      String(n.commentExcerpt || "").includes("provider_kyc")
+    ) {
+      return readableProviderUpdate(n);
     }
     if (n.type === "weather_alert") {
-      return String(n.commentExcerpt || "").trim() || "Weather alert";
+      const raw = String(n.commentExcerpt || "").trim();
+      return raw.startsWith("{") ? "Weather alert" : raw || "Weather alert";
     }
     const meta = parseLiveNotifMeta(n);
     const name = String(n.actorName || "Someone");

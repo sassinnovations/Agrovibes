@@ -1,26 +1,90 @@
 .provider-app {
   width: 100%;
-  max-width: 720px;
+  max-width: 430px;
   margin: 0 auto;
   min-height: 100%;
   color: #f8fafc;
   display: flex;
   flex-direction: column;
+  background: #303132;
+  position: relative;
+  padding-bottom: 96px;
 }
 
 .provider-app__top {
-  padding: 16px 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 55px;
+  padding: 12px 8px 12px 16px;
+  background: #262626;
 }
 
-.provider-app__brand {
-  margin: 0;
+.provider-app__logo img {
+  display: block;
+  width: 132px;
+  height: 28px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.provider-app__actions {
+  display: flex;
+  align-items: center;
+}
+
+.provider-app__actions a {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
   color: #c9ff35;
-  font-weight: 800;
+}
+
+.provider-app__actions svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .provider-app__body {
   flex: 1;
   padding: 12px 16px 24px;
+}
+
+.provider-tabs {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(399px, calc(100% - 32px));
+  height: 73px;
+  margin: 0 auto;
+  padding: 0 12px;
+  border-radius: 92px;
+  background: #262626;
+  z-index: 5;
+}
+
+.provider-tabs__item {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  color: #fff;
+  text-decoration: none;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.provider-tabs__item.is-active {
+  color: #c9ff35;
 }
 
 .provider-flow {
@@ -30,9 +94,9 @@
 }
 
 .provider-flow__card {
-  background: #f7f7f5;
-  color: #1c1c1c;
-  border: 1px solid #e6e6e4;
+  background: #373838;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   padding: 18px 16px;
   text-align: center;
@@ -46,13 +110,13 @@
 .provider-flow__card span {
   display: block;
   margin-top: 6px;
-  color: #667085;
+  color: #a8b0b8;
   font-size: 13px;
 }
 
 .provider-flow__card.is-done {
-  background: #eef8ef;
-  border-color: #d7efd9;
+  background: #243028;
+  border-color: rgba(201, 255, 53, 0.45);
 }
 
 .provider-flow__arrow {
@@ -75,9 +139,9 @@
 
 .provider-bank {
   margin-top: 18px;
-  background: #fff;
-  color: #1c1c1c;
-  border: 1px solid #e6e6e4;
+  background: #373838;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   padding: 16px;
   display: grid;
@@ -97,9 +161,9 @@
 }
 
 .provider-bank input {
-  background: #fff;
-  color: #1c1c1c;
-  border: 1px solid #e4e4e7;
+  background: #262626;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 12px 14px;
   font: inherit;

@@ -436,6 +436,12 @@ function formatDirectMessagePushExcerpt(body) {
   return directMessagePushPayload(body).excerpt;
 }
 
+function readablePushExcerpt(value) {
+  const text = String(value || "").trim();
+  if (!text || text.startsWith("{")) return "";
+  return text;
+}
+
 function socialPushCopy({ type, actorName, commentExcerpt }) {
   const actor = String(actorName || "Someone").trim() || "Someone";
   const excerpt = String(commentExcerpt || "").trim();
@@ -472,11 +478,17 @@ function socialPushCopy({ type, actorName, commentExcerpt }) {
     case "weather_alert":
       return { title: "Weather alert", body: excerpt || "Check today's farm weather." };
     case "provider_kyc_submitted":
-      return { title: "New provider KYC", body: excerpt || `${actor} submitted provider KYC` };
+      return { title: "New provider KYC", body: readablePushExcerpt(excerpt) || `${actor} submitted provider KYC` };
     case "provider_kyc_approved":
-      return { title: "Provider application approved", body: excerpt || "You can add listings now." };
+      return {
+        title: "Provider application approved",
+        body: readablePushExcerpt(excerpt) || "Admin approved your provider registration. You can add listings now."
+      };
     case "provider_kyc_rejected":
-      return { title: "Provider application rejected", body: excerpt || "Review the details and submit again." };
+      return {
+        title: "Provider application rejected",
+        body: readablePushExcerpt(excerpt) || "Admin rejected your provider registration. You can review and submit again."
+      };
     default:
       return { title: "Cropvibe", body: `${actor} sent you a notification` };
   }
