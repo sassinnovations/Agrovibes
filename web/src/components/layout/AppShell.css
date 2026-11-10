@@ -59,3 +59,22 @@
   padding: 0;
   background: #303132;
 }
+
+.app-shell--feed {
+  background: #262626;
+}
+
+.app-shell--feed .app-shell__main {
+  margin-left: 0;
+}
+
+.app-shell--feed .app-shell__main:not(.app-shell__main--with-right) .app-shell__content,
+.app-shell--feed .app-shell__main .app-shell__content--flush,
+.app-shell--feed .app-shell__main .app-shell__content--notifications {
+  width: 100%;
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 0 0 96px;
+  background: #303132;
+  min-height: 100vh;
+}

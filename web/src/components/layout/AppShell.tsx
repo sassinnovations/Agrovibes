@@ -1,29 +1,25 @@
 import { Outlet, useLocation } from "react-router-dom";
-import { HomeRightPanel } from "./HomeRightPanel";
-import { Sidebar } from "./Sidebar";
+import { FeedTabBar } from "../feed/FeedTabBar";
 import "./AppShell.css";
 
-const RIGHT_PANEL_ROUTES = new Set(["/", "/search"]);
 const FLUSH_ROUTES = new Set(["/drops", "/reels", "/messages"]);
 
 export function AppShell() {
   const { pathname } = useLocation();
   const providerApp = pathname === "/provider" || (pathname.startsWith("/provider/") && !pathname.startsWith("/provider/join"));
-  const showRightPanel = !providerApp && RIGHT_PANEL_ROUTES.has(pathname);
   const flushContent = FLUSH_ROUTES.has(pathname) || pathname.startsWith("/messages/");
   const notificationsView = pathname === "/notifications" || pathname === "/weather" || pathname.startsWith("/schemes");
 
   return (
-    <div className={`app-shell${providerApp ? " app-shell--provider" : ""}`}>
-      {providerApp ? null : <Sidebar />}
-      <div className={`app-shell__main${showRightPanel ? " app-shell__main--with-right" : ""}`}>
+    <div className={`app-shell${providerApp ? " app-shell--provider" : " app-shell--feed"}`}>
+      <div className="app-shell__main">
         <div
           className={`app-shell__content${flushContent ? " app-shell__content--flush" : ""}${notificationsView ? " app-shell__content--notifications" : ""}`}
         >
           <Outlet />
         </div>
-        {showRightPanel ? <HomeRightPanel /> : null}
       </div>
+      {providerApp ? null : <FeedTabBar />}
     </div>
   );
 }
