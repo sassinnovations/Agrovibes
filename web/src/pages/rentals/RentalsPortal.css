@@ -1,0 +1,256 @@
+.rentals-portal {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  color: #f8fafc;
+  padding: 8px 16px 32px;
+}
+
+.rentals-portal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rentals-portal__logo {
+  width: 132px;
+  height: 28px;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.rentals-portal__location {
+  margin-top: 14px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.rentals-portal__kicker {
+  display: block;
+  color: #a8b0b8;
+  font-size: 12px;
+}
+
+.rentals-portal__location-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-weight: 700;
+}
+
+.rentals-portal__location-value span {
+  color: #c9ff35;
+}
+
+.rentals-banners {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  margin-top: 16px;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.rentals-banner {
+  flex: 0 0 min(100%, 420px);
+  min-height: 148px;
+  border-radius: 16px;
+  padding: 16px;
+  text-decoration: none;
+  color: #f4fff4;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    linear-gradient(120deg, rgba(201, 255, 53, 0.18), transparent 55%),
+    #303132;
+}
+
+.rentals-banner small {
+  color: #c9ff35;
+  font-weight: 700;
+}
+
+.rentals-banner strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.rentals-banner em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  color: #d5d8dc;
+  font-size: 13px;
+}
+
+.rentals-banner b {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.rentals-portal h2 {
+  margin: 18px 0 10px;
+  font-size: 16px;
+}
+
+.rentals-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #303132;
+  border-radius: 12px;
+  padding: 0 12px;
+  min-height: 44px;
+}
+
+.rentals-search input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: #f8fafc;
+  font: inherit;
+  outline: none;
+}
+
+.rentals-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.rentals-section-head h2 {
+  margin: 0;
+}
+
+.rentals-section-head a {
+  color: #c9ff35;
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.rentals-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.rentals-tile {
+  position: relative;
+  min-height: 120px;
+  border-radius: 14px;
+  overflow: hidden;
+  text-decoration: none;
+  color: #fff;
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+  font-weight: 800;
+  background: #303132;
+}
+
+.rentals-tile span {
+  position: relative;
+  z-index: 1;
+}
+
+.rentals-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.rentals-card {
+  background: #303132;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.rentals-card strong {
+  display: block;
+  font-size: 16px;
+}
+
+.rentals-card p {
+  margin: 6px 0 0;
+  color: #a8b0b8;
+  font-size: 13px;
+}
+
+.rentals-card__row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.rentals-card input {
+  flex: 1;
+  min-width: 0;
+  background: #262626;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.rentals-card button,
+.rentals-back {
+  border: 0;
+  background: #c9ff35;
+  color: #262626;
+  font-weight: 800;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.rentals-back {
+  display: inline-flex;
+  margin-bottom: 8px;
+}
+
+.rentals-note,
+.rentals-error {
+  color: #a8b0b8;
+  font-size: 13px;
+}
+
+.rentals-error {
+  color: #ffb4b4;
+}
+
+.rentals-sheet {
+  margin-top: 8px;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.rentals-sheet button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #f8fafc;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px;
+  cursor: pointer;
+}
+
+.rentals-sheet button.is-active {
+  color: #c9ff35;
+}

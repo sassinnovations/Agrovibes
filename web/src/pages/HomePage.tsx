@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchHomePosts, fetchHomeStories } from "../api/home";
 import type { HomePost, HomeStory } from "../api/types";
+import { FeedTopBar } from "../components/feed/FeedTopBar";
 import { PostCard } from "../components/feed/PostCard";
 import { HomeStories } from "../components/feed/HomeStories";
 import { useAuth } from "../auth/AuthContext";
@@ -45,6 +46,7 @@ export function HomePage() {
 
   return (
     <div className="home-page">
+      <FeedTopBar />
       <HomeStories
         stories={stories}
         viewerName={user?.fullName || "You"}

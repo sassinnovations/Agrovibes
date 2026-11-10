@@ -11,6 +11,20 @@
   justify-content: center;
 }
 
+.app-shell--provider {
+  background: #262626;
+}
+
+.app-shell--provider .app-shell__main {
+  margin-left: 0;
+}
+
+.app-shell--provider .app-shell__content {
+  max-width: 430px;
+  padding: 0;
+  background: #303132;
+}
+
 .app-shell__main--with-right {
   justify-content: center;
   gap: 32px;
@@ -38,4 +52,10 @@
 .app-shell__main:not(.app-shell__main--with-right) .app-shell__content:not(.app-shell__content--flush):not(.app-shell__content--notifications) {
   max-width: var(--content-max);
   padding: 24px 20px 48px;
+}
+
+.app-shell--provider .app-shell__main .app-shell__content {
+  max-width: 430px;
+  padding: 0;
+  background: #303132;
 }

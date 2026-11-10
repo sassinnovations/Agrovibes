@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Modal, Pressable, Text, TextInput, View, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchLocationCities, fetchLocationDistricts, fetchLocationStates } from "../../services/api";
@@ -34,6 +34,7 @@ export function AddressDetailsFields({
   const [districts, setDistricts] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [picker, setPicker] = useState<"state" | "district" | "city" | null>(null);
+  const [query, setQuery] = useState("");
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -87,6 +88,19 @@ export function AddressDetailsFields({
   }, [stateName, district]);
 
   const options = picker === "state" ? states : picker === "district" ? districts : cities;
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return options;
+    const starts = options.filter((name) => name.toLowerCase().startsWith(needle));
+    const contains = options.filter(
+      (name) => !name.toLowerCase().startsWith(needle) && name.toLowerCase().includes(needle)
+    );
+    return [...starts, ...contains];
+  }, [options, query]);
+  const openPicker = (next: "state" | "district" | "city") => {
+    setQuery("");
+    setPicker(next);
+  };
   const choose = (value: string) => {
     if (picker === "state") {
       onChangeState(value);
@@ -112,20 +126,20 @@ export function AddressDetailsFields({
         placeholder="Enter address"
         placeholderTextColor={PROVIDER_MUTED}
       />
-      <SelectField label="State" value={stateName} placeholder="Select state" onPress={() => setPicker("state")} />
+      <SelectField label="State" value={stateName} placeholder="Select state" onPress={() => openPicker("state")} />
       <SelectField
         label="District"
         value={district}
         placeholder="Select district"
         disabled={!stateName}
-        onPress={() => setPicker("district")}
+        onPress={() => openPicker("district")}
       />
       <SelectField
         label="City"
         value={city}
         placeholder="Select city"
         disabled={!district}
-        onPress={() => setPicker("city")}
+        onPress={() => openPicker("city")}
       />
       <Text style={styles.label}>PIN code</Text>
       <TextInput
@@ -144,8 +158,17 @@ export function AddressDetailsFields({
             <Text style={styles.sheetTitle}>
               {picker === "state" ? "Select state" : picker === "district" ? "Select district" : "Select city"}
             </Text>
+            <TextInput
+              style={styles.search}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Type to search"
+              placeholderTextColor={PROVIDER_MUTED}
+              autoCorrect={false}
+              autoCapitalize="words"
+            />
             <FlatList
-              data={options}
+              data={filtered}
               keyExtractor={(item) => item}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
@@ -207,6 +230,16 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   sheet: { maxHeight: "70%", backgroundColor: "#1a1a1a", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
   sheetTitle: { color: APP_LIME, fontSize: 16, fontWeight: "800", marginBottom: 8 },
+  search: {
+    backgroundColor: PROVIDER_CARD,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    color: PROVIDER_TEXT,
+    paddingHorizontal: 12,
+    minHeight: 44,
+    marginBottom: 8
+  },
   option: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
   optionText: { color: PROVIDER_TEXT, fontSize: 15 },
   empty: { color: PROVIDER_MUTED, paddingVertical: 20 }
