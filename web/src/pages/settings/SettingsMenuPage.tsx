@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { fetchProviderKycStatus } from "../../api/providerKyc";
+import { useProviderJourney } from "../../components/provider/useProviderJourney";
 import {
   SettingsIconActivity,
   SettingsIconBack,
@@ -77,14 +77,12 @@ function SettingsSection({ title, children }: { title: string; children: React.R
   );
 }
 
-function PromoCard({ onClick }: { onClick?: () => void }) {
+function PromoCard({ title, subtitle, action, onClick }: { title: string; subtitle: string; action: string; onClick?: () => void }) {
   return (
     <button type="button" className="settings-promo" onClick={onClick}>
-      <p className="settings-promo__title">
-        Rent It. Service It. <span>Earn</span>
-      </p>
-      <p className="settings-promo__subtitle">Machinery. Experts. Opportunity.</p>
-      <span className="settings-promo__cta">Join As Provider</span>
+      <p className="settings-promo__title">{title}</p>
+      <p className="settings-promo__subtitle">{subtitle}</p>
+      <span className="settings-promo__cta">{action}</span>
     </button>
   );
 }
@@ -92,27 +90,7 @@ function PromoCard({ onClick }: { onClick?: () => void }) {
 export function SettingsMenuPage() {
   const navigate = useNavigate();
   const { signOut, token } = useAuth();
-
-  const openProvider = async () => {
-    if (!token) {
-      navigate("/provider/join");
-      return;
-    }
-    try {
-      const status = await fetchProviderKycStatus(token);
-      if (status.status === "approved") {
-        navigate("/provider");
-        return;
-      }
-      if (status.status === "rejected") {
-        navigate("/provider/join");
-        return;
-      }
-      navigate("/");
-    } catch {
-      navigate("/");
-    }
-  };
+  const journey = useProviderJourney(token);
 
   return (
     <div className="settings-page">
@@ -135,16 +113,19 @@ export function SettingsMenuPage() {
           />
         </SettingsSection>
 
-        <PromoCard onClick={() => navigate("/provider/join")} />
+        <PromoCard
+          title={journey.kind === "not_submitted" ? "Become a Rental Provider" : journey.action}
+          subtitle={journey.rentalsDetail}
+          action={journey.action}
+          onClick={() => navigate(journey.to)}
+        />
 
         <SettingsSection title="Provider">
           <SettingsRow
             icon={<SettingsIconStore />}
-            title="Open provider dashboard"
-            subtitle="Opens after admin approves your KYC"
-            onClick={() => {
-              void openProvider();
-            }}
+            title={journey.action}
+            subtitle={journey.rentalsDetail}
+            onClick={() => navigate(journey.to)}
             showDivider={false}
           />
         </SettingsSection>

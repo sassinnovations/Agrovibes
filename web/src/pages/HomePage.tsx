@@ -4,6 +4,8 @@ import { fetchHomePosts, fetchHomeStories } from "../api/home";
 import { fetchPublicRentals, type PublicRentalListing } from "../api/rentals";
 import type { HomePost, HomeStory } from "../api/types";
 import { FeedTopBar } from "../components/feed/FeedTopBar";
+import { ProviderPromoBanner } from "../components/provider/ProviderPromoBanner";
+import { useProviderJourney } from "../components/provider/useProviderJourney";
 import { PostCard } from "../components/feed/PostCard";
 import { HomeStories } from "../components/feed/HomeStories";
 import { useAuth } from "../auth/AuthContext";
@@ -67,6 +69,7 @@ function HomeRentals({ token }: { token: string | null }) {
 
 export function HomePage() {
   const { token, user } = useAuth();
+  const journey = useProviderJourney(token);
   const [posts, setPosts] = useState<HomePost[]>([]);
   const [stories, setStories] = useState<HomeStory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +107,7 @@ export function HomePage() {
   return (
     <div className="home-page">
       <FeedTopBar />
+      <ProviderPromoBanner journey={journey} />
       <HomeStories
         stories={stories}
         viewerName={user?.fullName || "You"}
