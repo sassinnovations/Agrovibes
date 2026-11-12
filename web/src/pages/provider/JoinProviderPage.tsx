@@ -411,7 +411,7 @@ export function JoinProviderPage() {
           <SettingsIconBack />
         </button>
         <h1 className="settings-topbar__title">
-          {step === "intro" ? "Join As Provider" : step === "terms" ? "Terms And Condition" : "Provider Verification"}
+          {step === "intro" ? "Become a Rental Provider" : step === "terms" ? "Terms And Condition" : "Provider Verification"}
         </h1>
         <span className="settings-topbar__spacer" />
       </header>
@@ -420,13 +420,13 @@ export function JoinProviderPage() {
         {step === "intro" ? (
           <section className="join-card">
             <p className="join-kicker">Rent It. Service It. Earn</p>
-            <h2>Become a Provider</h2>
+            <h2>Become a Rental Provider</h2>
             <p>
               Individuals verify with DigiLocker Aadhaar. Businesses also add PAN or GST. Admin reviews the
               application after you submit.
             </p>
             <button type="button" className="join-btn" onClick={() => setStep("terms")}>
-              Become A Provider
+              Become a Rental Provider
             </button>
           </section>
         ) : null}
@@ -465,7 +465,7 @@ export function JoinProviderPage() {
                 disabled={!accepted}
                 onClick={() => setStep("role")}
               >
-                Accept And Join As Provider
+                Accept And Become a Rental Provider
               </button>
             )}
           </section>

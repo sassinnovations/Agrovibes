@@ -1,0 +1,44 @@
+.provider-banner {
+  margin: 12px 12px 4px;
+  padding: 16px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #243028 0%, #1a1a1a 70%);
+  border: 1px solid rgba(201, 255, 53, 0.4);
+}
+
+.provider-banner__kicker {
+  margin: 0;
+  color: #c9ff35;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.provider-banner h2 {
+  margin: 8px 0;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.provider-banner p {
+  margin: 0 0 8px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+}
+
+.provider-banner__line {
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.provider-banner__cta {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #c9ff35;
+  color: #171717;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchPublicRentals, type PublicRentalListing } from "../../api/rentals";
+import { useProviderJourney } from "../../components/provider/useProviderJourney";
 import { featuredRentalCategories, portalCategoryForListing, RENTAL_CATEGORIES, RENTAL_LOCATIONS } from "./rentalCatalog";
 import "./RentalsPortal.css";
 
@@ -38,6 +39,7 @@ const BANNERS = [
 
 export function RentalsPortalPage() {
   const { token } = useAuth();
+  const journey = useProviderJourney(token);
   const [location, setLocation] = useState("Add location");
   const [locationOpen, setLocationOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -99,7 +101,19 @@ export function RentalsPortalPage() {
         </div>
       ) : null}
 
-      <div className="rentals-banners">
+      <div className="rentals-choices">
+        <a className="rentals-choice" href="#find-equipment">
+          <strong>Find Equipment</strong>
+          <span>Find tractors and farming equipment for rent.</span>
+        </a>
+        <Link className="rentals-choice rentals-choice--list" to={journey.to}>
+          <strong>{journey.rentalsTitle}</strong>
+          <span>{journey.rentalsDetail}</span>
+          <em>{journey.action}</em>
+        </Link>
+      </div>
+
+      <div className="rentals-banners" id="find-equipment">
         {BANNERS.map((banner) => (
           <Link key={banner.id} className="rentals-banner" to={`/rentals/${banner.id}?location=${encodeURIComponent(location)}`}>
             <div>
