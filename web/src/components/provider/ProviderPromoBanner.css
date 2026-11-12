@@ -1,44 +1,52 @@
-.provider-banner {
-  margin: 12px 12px 4px;
-  padding: 16px;
+.provider-banners {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  margin: 8px 0 4px;
+  padding: 0 12px 4px;
+  scrollbar-width: none;
+}
+
+.provider-banners::-webkit-scrollbar {
+  display: none;
+}
+
+.provider-banners__card {
+  flex: 0 0 min(100%, 420px);
+  min-height: 148px;
   border-radius: 16px;
-  background: linear-gradient(160deg, #243028 0%, #1a1a1a 70%);
-  border: 1px solid rgba(201, 255, 53, 0.4);
-}
-
-.provider-banner__kicker {
-  margin: 0;
-  color: #c9ff35;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.provider-banner h2 {
-  margin: 8px 0;
-  font-size: 22px;
-  line-height: 1.25;
-}
-
-.provider-banner p {
-  margin: 0 0 8px;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 14px;
-}
-
-.provider-banner__line {
-  color: #f8fafc;
-  font-weight: 800;
-}
-
-.provider-banner__cta {
-  display: inline-flex;
-  margin-top: 8px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: #c9ff35;
-  color: #171717;
-  font-size: 14px;
-  font-weight: 800;
+  padding: 16px;
   text-decoration: none;
+  color: #f4fff4;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    linear-gradient(120deg, rgba(201, 255, 53, 0.18), transparent 55%),
+    #303132;
+}
+
+.provider-banners__card small {
+  color: #c9ff35;
+  font-weight: 700;
+}
+
+.provider-banners__card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.provider-banners__card em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  color: #d5d8dc;
+  font-size: 13px;
+}
+
+.provider-banners__card b {
+  margin-top: 12px;
+  font-size: 13px;
 }
