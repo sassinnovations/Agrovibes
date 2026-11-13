@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -97,42 +96,6 @@ function SettingsRowList({ items }: { items: SettingsRowItem[] }) {
         return <SettingsRow key={key} {...rowProps} showDivider={index < items.length - 1} />;
       })}
     </>
-  );
-}
-
-function PromoCard({ onPress }: { onPress?: () => void }) {
-  return (
-    <Pressable
-      style={styles.promoWrap}
-      onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole="button"
-      accessibilityLabel="Join As Provider"
-    >
-      <View style={styles.promoCard}>
-        <LinearGradient
-          colors={["rgba(201, 255, 53, 0.45)", "rgba(201, 255, 53, 0)"]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 0.55, y: 0.5 }}
-          style={styles.promoGlowLeft}
-          pointerEvents="none"
-        />
-        <LinearGradient
-          colors={["rgba(201, 255, 53, 0)", "rgba(201, 255, 53, 0.35)"]}
-          start={{ x: 0.45, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.promoGlowRight}
-          pointerEvents="none"
-        />
-        <Text style={styles.promoTitle}>
-          Rent It. Service It. <Text style={styles.promoTitleAccent}>Earn</Text>
-        </Text>
-        <Text style={styles.promoSubtitle}>Machinery. Experts. Opportunity.</Text>
-        <View style={styles.promoCta}>
-          <Text style={styles.promoCtaText}>Join As Provider</Text>
-        </View>
-      </View>
-    </Pressable>
   );
 }
 
@@ -297,8 +260,6 @@ export function SettingsMenuScreen() {
           />
         </SettingsSection>
 
-        <PromoCard onPress={() => navigation.navigate("ProviderOnboarding")} />
-
         <SettingsSection title="Provider">
           <SettingsRow
             icon="storefront-outline"
@@ -312,16 +273,15 @@ export function SettingsMenuScreen() {
                   return;
                 }
                 if (status === "rejected") {
-                  navigation.navigate("ProviderOnboarding");
+                  navigation.navigate("ProviderOfferRole");
                   return;
                 }
                 Alert.alert(
                   status === "pending" ? "Waiting for admin" : "Provider registration",
                   status === "pending"
                     ? "Your application is with admin. Stay on the CropVibe feed until you get an approval or rejection notification."
-                    : "Finish Join as Provider first. After you submit, admin reviews it before listings open."
+                    : "Use Become a Rental Provider on Home to choose what you offer."
                 );
-                if (status !== "pending") navigation.navigate("ProviderOnboarding");
               })();
             }}
             showDivider={false}

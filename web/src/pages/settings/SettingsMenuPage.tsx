@@ -77,16 +77,6 @@ function SettingsSection({ title, children }: { title: string; children: React.R
   );
 }
 
-function PromoCard({ title, subtitle, action, onClick }: { title: string; subtitle: string; action: string; onClick?: () => void }) {
-  return (
-    <button type="button" className="settings-promo" onClick={onClick}>
-      <p className="settings-promo__title">{title}</p>
-      <p className="settings-promo__subtitle">{subtitle}</p>
-      <span className="settings-promo__cta">{action}</span>
-    </button>
-  );
-}
-
 export function SettingsMenuPage() {
   const navigate = useNavigate();
   const { signOut, token } = useAuth();
@@ -113,22 +103,17 @@ export function SettingsMenuPage() {
           />
         </SettingsSection>
 
-        <PromoCard
-          title={journey.kind === "not_submitted" ? "Become a Rental Provider" : journey.action}
-          subtitle={journey.rentalsDetail}
-          action={journey.action}
-          onClick={() => navigate(journey.to)}
-        />
-
-        <SettingsSection title="Provider">
-          <SettingsRow
-            icon={<SettingsIconStore />}
-            title={journey.action}
-            subtitle={journey.rentalsDetail}
-            onClick={() => navigate(journey.to)}
-            showDivider={false}
-          />
-        </SettingsSection>
+        {journey.kind === "not_submitted" ? null : (
+          <SettingsSection title="Provider">
+            <SettingsRow
+              icon={<SettingsIconStore />}
+              title={journey.action}
+              subtitle={journey.rentalsDetail}
+              onClick={() => navigate(journey.to)}
+              showDivider={false}
+            />
+          </SettingsSection>
+        )}
 
         <SettingsSection title="How You Use Cropvibe">
           <SettingsRow icon={<SettingsIconBookmark />} title="Saved" to="/profile?tab=Saved" />

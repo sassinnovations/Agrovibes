@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
   addProviderEquipment,
@@ -72,7 +72,9 @@ function gstOk(value: string) {
 export function JoinProviderPage() {
   const navigate = useNavigate();
   const { token } = useAuth();
-  const [step, setStep] = useState<Step>("intro");
+  const [searchParams] = useSearchParams();
+  const openedAtSelection = searchParams.get("step") === "role";
+  const [step, setStep] = useState<Step>(openedAtSelection ? "role" : "intro");
   const [approval, setApproval] = useState("pending");
   const [equipment, setEquipment] = useState<Array<{ id: number; name: string; category: string; dailyRate?: string | null }>>([]);
   const [equipName, setEquipName] = useState("");
@@ -172,7 +174,10 @@ export function JoinProviderPage() {
     else if (step === "terms") {
       if (termsPage === 2) setTermsPage(1);
       else setStep("intro");
-    } else if (step === "role") setStep("terms");
+    } else if (step === "role") {
+      if (openedAtSelection) navigate("/");
+      else setStep("terms");
+    }
     else if (step === "type") setStep("role");
     else if (step === "details") setStep("type");
     else if (step === "aadhaar") setStep("details");

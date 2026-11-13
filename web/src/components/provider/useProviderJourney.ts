@@ -14,7 +14,7 @@ export type ProviderJourney = {
 const notRegistered: ProviderJourney = {
   kind: "not_submitted",
   action: "Become a Rental Provider",
-  to: "/provider/join",
+  to: "/provider/join?step=role",
   rentalsTitle: "List Equipment",
   rentalsDetail: "Register as a provider and list your equipment."
 };
