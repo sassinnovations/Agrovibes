@@ -340,6 +340,8 @@ async function ensureLearnUsersTable() {
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS location_lng DOUBLE PRECISION`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active'`);
+  await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS moderation_reason TEXT`);
+  await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS moderation_until TIMESTAMPTZ`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT false`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`);
   learnUsersTableReady = true;
@@ -3829,9 +3831,30 @@ router.post("/v1/auth/login", async (req, res) => {
       res.status(401).json({ message: "Invalid credentials" });
       return;
     }
-    if (String(userRow.accountStatus || "active").toLowerCase() === "deleted") {
+    const loginStatus = String(userRow.accountStatus || "active").toLowerCase();
+    if (loginStatus === "deleted") {
       res.status(403).json({ message: "This account was deleted. Please create a new account." });
       return;
+    }
+    if (loginStatus === "banned") {
+      res.status(403).json({ message: "This account is banned." });
+      return;
+    }
+    if (loginStatus === "suspended") {
+      const untilResult = await query(
+        `SELECT moderation_until AS "moderationUntil" FROM learn_users WHERE id = $1 LIMIT 1`,
+        [userRow.id]
+      );
+      const until = untilResult.rows[0]?.moderationUntil;
+      if (until && new Date(until).getTime() <= Date.now()) {
+        await query(
+          `UPDATE learn_users SET account_status = 'active', moderation_reason = NULL, moderation_until = NULL WHERE id = $1`,
+          [userRow.id]
+        );
+      } else {
+        res.status(403).json({ message: "This account is suspended." });
+        return;
+      }
     }
 
     const user = authUserFromRow(userRow);
@@ -4538,6 +4561,7 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
     await ensureHomePostsTable();
     await ensureSocialFollowsTable();
     await ensureDirectMessagesTable();
+    await ensureProviderKycTable();
 
     const limitRaw = Number(req.query.limit || 100);
     const offsetRaw = Number(req.query.offset || 0);
@@ -4559,7 +4583,14 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
         u.bio,
         u.website,
         u.location_label AS "locationLabel",
+        u.account_status AS "accountStatus",
+        u.moderation_reason AS "moderationReason",
+        u.moderation_until AS "moderationUntil",
         u.created_at AS "createdAt",
+        kyc.status AS "kycStatus",
+        kyc.document_summary AS "kycSummary",
+        kyc.address AS "kycAddress",
+        aadhaar.aadhaar_last4 AS "aadhaarLast4",
         COUNT(*) OVER()::INT AS "totalCount",
         COALESCE(posts.posts_count, 0)::INT AS "postsCount",
         COALESCE(posts.reels_count, 0)::INT AS "reelsCount",
@@ -4605,6 +4636,19 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
         FROM direct_messages dm
         WHERE dm.receiver_id = u.id
       ) received ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT k.status, k.document_summary, k.address
+        FROM provider_kyc_submissions k
+        WHERE k.user_id = u.id
+        ORDER BY k.created_at DESC
+        LIMIT 1
+      ) kyc ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT c.aadhaar_last4
+        FROM provider_kyc_phone_checks c
+        WHERE c.user_id = u.id
+        LIMIT 1
+      ) aadhaar ON TRUE
       WHERE (
         $1::TEXT = ''
         OR LOWER(COALESCE(u.full_name, '')) LIKE $2
@@ -4623,6 +4667,64 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
     res.json({ users, total, limit, offset });
   } catch (error) {
     res.status(500).json({ message: "Failed to list users", error: error.message });
+  }
+});
+
+router.post("/v1/admin/users/:id/moderation", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    await ensureLearnUsersTable();
+    const userId = Number(req.params.id);
+    const action = String(req.body?.action || "").trim().toLowerCase();
+    const reason = String(req.body?.reason || "").trim();
+    const untilRaw = String(req.body?.until || "").trim();
+    if (!Number.isFinite(userId) || userId <= 0) {
+      res.status(400).json({ message: "Invalid user" });
+      return;
+    }
+    if (!["suspend", "ban", "restore"].includes(action)) {
+      res.status(400).json({ message: "Invalid action" });
+      return;
+    }
+    if (action !== "restore" && reason.length < 3) {
+      res.status(400).json({ message: "A reason is required" });
+      return;
+    }
+
+    let status = "active";
+    let until = null;
+    if (action === "suspend") {
+      status = "suspended";
+      if (untilRaw) {
+        const untilDate = new Date(untilRaw);
+        if (Number.isNaN(untilDate.getTime()) || untilDate.getTime() <= Date.now()) {
+          res.status(400).json({ message: "Choose a future end date" });
+          return;
+        }
+        until = untilDate.toISOString();
+      }
+    } else if (action === "ban") {
+      status = "banned";
+    }
+
+    const result = await query(
+      `
+      UPDATE learn_users
+      SET account_status = $2,
+          moderation_reason = $3,
+          moderation_until = $4
+      WHERE id = $1
+        AND role <> 'admin'
+      RETURNING id, account_status AS "accountStatus", moderation_reason AS "moderationReason", moderation_until AS "moderationUntil"
+      `,
+      [userId, status, action === "restore" ? null : reason, until]
+    );
+    if (!result.rows[0]) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+    res.json({ success: true, ...result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update user", error: error.message });
   }
 });
 
@@ -11702,6 +11804,7 @@ async function ensureProviderListingsTable() {
     `
   );
   await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS rc_number TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS removal_reason TEXT`);
 }
 
 function adminListingCategory(channel) {
@@ -11834,10 +11937,13 @@ router.get("/v1/admin/listings", authRequired, requireRole("admin"), async (req,
         l.category,
         l.channel,
         l.status,
+        l.category AS "categoryName",
         l.rc_number AS "rcNumber",
+        l.removal_reason AS "removalReason",
         l.created_at AS "submitted",
         u.full_name AS "submitterName",
         u.email AS "submitterEmail",
+        u.role AS "submitterRole",
         u.avatar_url AS "submitterAvatarUrl"
       FROM provider_listings l
       LEFT JOIN learn_users u ON u.id = l.user_id
@@ -11855,9 +11961,15 @@ router.get("/v1/admin/listings", authRequired, requireRole("admin"), async (req,
         subtitle: row.rcNumber ? `${row.category || row.channel} · RC ${row.rcNumber} submitted for review` : row.category || row.channel,
         submitterName: row.submitterName || "Provider",
         submitterEmail: row.submitterEmail || "",
+        submitterRole: row.submitterRole || "Provider",
         submitterAvatarUrl: row.submitterAvatarUrl || null,
         date: row.submitted ? new Date(row.submitted).toISOString() : null,
         flags: 0,
+        rate: null,
+        channel: row.channel || "",
+        categoryName: row.categoryName || "",
+        rcNumber: row.rcNumber || "",
+        removalReason: row.removalReason || "",
         status: adminListingStatus(row.status)
       }))
     });
@@ -12001,16 +12113,21 @@ router.post("/v1/admin/listings/:id/respond", authRequired, requireRole("admin")
       res.status(400).json({ message: "Choose approve or unpublish." });
       return;
     }
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (action === "unpublish" && reason.length < 3) {
+      res.status(400).json({ message: "A removal reason is required" });
+      return;
+    }
     const status = action === "approve" ? "approved" : "unpublished";
     await ensureProviderListingsTable();
     const updated = await query(
       `
       UPDATE provider_listings
-      SET status = $2, reviewed_at = NOW()
+      SET status = $2, reviewed_at = NOW(), removal_reason = $3
       WHERE id = $1
       RETURNING id, status
       `,
-      [listingId, status]
+      [listingId, status, action === "unpublish" ? reason : null]
     );
     if (!updated.rows[0]) {
       res.status(404).json({ message: "Listing not found" });

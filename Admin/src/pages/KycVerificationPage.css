@@ -35,8 +35,71 @@
   background: #121212;
 }
 
-.kyc-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
+.kyc-table tbody tr {
+  cursor: pointer;
+}
+
+.kyc-table tbody tr:hover,
+.kyc-table tbody tr.is-selected {
+  background: rgba(198, 255, 0, 0.06);
+}
+
+.kyc-detail {
+  padding: 16px;
+  border: 1px solid rgba(198, 255, 0, 0.35);
+  border-radius: 12px;
+  background: #151515;
+}
+
+.kyc-detail__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.kyc-detail__head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.kyc-detail__head p {
+  margin: 4px 0 0;
+  color: #aaa;
+  font-size: 0.86rem;
+}
+
+.kyc-detail__close {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: #ddd;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.kyc-detail__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.kyc-detail__facts dt {
+  color: #8a8a8a;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kyc-detail__facts dd {
+  margin: 4px 0 0;
+}
+
+.kyc-detail__summary {
+  margin: 0 0 14px;
+  color: #e8e8e8;
+  line-height: 1.45;
 }
 
 .kyc-empty {

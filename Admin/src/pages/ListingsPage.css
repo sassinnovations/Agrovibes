@@ -4,6 +4,28 @@
   gap: 16px;
 }
 
+.listings-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.listings-filters__btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: #cfcfcf;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.listings-filters__btn.is-active {
+  background: #c6ff00;
+  border-color: #c6ff00;
+  color: #111;
+  font-weight: 700;
+}
+
 .listings-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -167,13 +189,14 @@
   border: 1px solid rgba(255, 176, 32, 0.45);
 }
 
-.listings-status--approved {
+.listings-status--active {
   color: #c6ff00;
   background: rgba(198, 255, 0, 0.1);
   border: 1px solid rgba(198, 255, 0, 0.45);
 }
 
-.listings-status--unpublished {
+.listings-status--removed,
+.listings-status--flagged {
   color: #ff6b6b;
   background: rgba(255, 107, 107, 0.1);
   border: 1px solid rgba(255, 107, 107, 0.45);
@@ -199,14 +222,206 @@
   cursor: not-allowed;
 }
 
-.listings-btn--approve {
-  border: 1px solid rgba(198, 255, 0, 0.55);
-  color: #c6ff00;
+.listings-btn--view {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #eee;
 }
 
-.listings-btn--unpublish {
+.listings-btn--remove {
   border: 1px solid rgba(255, 107, 107, 0.55);
   color: #ff6b6b;
+}
+
+.listing-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.listing-modal--front {
+  z-index: 90;
+}
+
+.listing-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.62);
+  cursor: pointer;
+}
+
+.listing-modal__card {
+  position: relative;
+  width: min(460px, 100%);
+  background: #1b1b1b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+}
+
+.listing-modal__header,
+.listing-modal__hero {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.listing-modal__header {
+  margin-bottom: 16px;
+}
+
+.listing-modal__back {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #c6ff00;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.listing-modal__header h2,
+.listing-modal__hero h3 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.listing-modal__hero {
+  margin-bottom: 14px;
+}
+
+.listing-modal__hero p {
+  margin: 2px 0 0;
+  color: #8d8d8d;
+  font-size: 0.84rem;
+}
+
+.listing-modal__avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #2c2c2c;
+  overflow: hidden;
+}
+
+.listing-modal__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.listing-modal__label {
+  display: block;
+  margin: 12px 0 8px;
+  color: #bdbdbd;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.listing-modal__note {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #141414;
+  color: #eee;
+  border-radius: 8px;
+  padding: 12px;
+  resize: vertical;
+  font: inherit;
+}
+
+.listing-modal__choices {
+  display: flex;
+  gap: 18px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: #141414;
+}
+
+.listing-modal__choices label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #ddd;
+}
+
+.listing-modal__choices input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.listing-modal__choices label span {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid #777;
+}
+
+.listing-modal__choices label.is-on span {
+  border-color: #c6ff00;
+  background: radial-gradient(circle, #c6ff00 0 4px, transparent 5px);
+}
+
+.listing-modal__error {
+  margin: 10px 0 0;
+  color: #ff8d8d;
+  font-size: 0.84rem;
+}
+
+.listing-modal__footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.listing-modal__footer--end {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.listing-modal__approve,
+.listing-modal__reject,
+.listing-modal__cancel,
+.listing-modal__confirm {
+  min-height: 40px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.listing-modal__approve,
+.listing-modal__cancel {
+  background: transparent;
+  color: #eee;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.listing-modal__cancel {
+  border: none;
+  padding: 0 12px;
+}
+
+.listing-modal__reject,
+.listing-modal__confirm {
+  background: #7a2e32;
+  color: #fff;
+  border: none;
+}
+
+.listing-modal__approve:disabled,
+.listing-modal__reject:disabled,
+.listing-modal__confirm:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .listings-pager {

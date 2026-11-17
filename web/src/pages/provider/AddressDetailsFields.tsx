@@ -16,7 +16,6 @@ function filterPlaces(options: string[], query: string) {
 
 function PlaceCombobox({
   label,
-  sheetTitle,
   value,
   placeholder,
   options,
@@ -24,7 +23,6 @@ function PlaceCombobox({
   onChange
 }: {
   label: string;
-  sheetTitle: string;
   value: string;
   placeholder: string;
   options: string[];
@@ -32,91 +30,77 @@ function PlaceCombobox({
   onChange: (value: string) => void;
 }) {
   const listId = useId();
-  const searchRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(value);
   const shown = useMemo(() => filterPlaces(options, query), [options, query]);
+  const showList = open && query.trim().length > 0;
 
   useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    searchRef.current?.focus();
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+    setQuery(value);
+  }, [value]);
 
-  const close = () => setOpen(false);
-  const openSheet = () => {
-    if (disabled) return;
-    setQuery("");
-    setOpen(true);
+  useEffect(() => {
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    return () => document.removeEventListener("mousedown", onPointer);
+  }, []);
+
+  const pick = (name: string) => {
+    onChange(name);
+    setQuery(name);
+    setOpen(false);
   };
 
   return (
-    <div className="join-label">
+    <div className="join-label join-combo" ref={rootRef}>
       <span>{label}</span>
-      <button
-        type="button"
-        className={`join-select${disabled ? " is-disabled" : ""}`}
+      <input
+        className="join-input"
+        value={query}
+        placeholder={placeholder}
         disabled={disabled}
-        onClick={openSheet}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-      >
-        <span className={value ? "join-select__value" : "join-select__placeholder"}>{value || placeholder}</span>
-        <svg viewBox="0 0 24 24" aria-hidden>
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
-      {open ? (
-        <div className="join-sheet-backdrop" onClick={close}>
-          <div
-            className="join-sheet"
-            role="dialog"
-            aria-label={sheetTitle}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3>{sheetTitle}</h3>
-            <input
-              ref={searchRef}
-              className="join-input join-sheet__search"
-              placeholder="Type to search"
-              value={query}
-              aria-controls={listId}
-              aria-autocomplete="list"
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && shown[0]) {
-                  event.preventDefault();
-                  onChange(shown[0]);
-                  close();
-                }
-              }}
-            />
-            <div className="join-sheet__list" id={listId} role="listbox">
-              {shown.length === 0 ? (
-                <p className="join-sheet__empty">No places found.</p>
-              ) : (
-                shown.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    role="option"
-                    aria-selected={name === value}
-                    className={`join-sheet__option${name === value ? " is-active" : ""}`}
-                    onClick={() => {
-                      onChange(name);
-                      close();
-                    }}
-                  >
-                    {name}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={showList}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          const next = event.target.value;
+          setQuery(next);
+          setOpen(true);
+          if (!next.trim()) onChange("");
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Enter" && shown[0]) {
+            event.preventDefault();
+            pick(shown[0]);
+          }
+        }}
+      />
+      {showList ? (
+        <div className="join-combo__list" id={listId} role="listbox">
+          {shown.length === 0 ? (
+            <p className="join-combo__empty">No places found.</p>
+          ) : (
+            shown.map((name) => (
+              <button
+                key={name}
+                type="button"
+                role="option"
+                aria-selected={name === value}
+                className={`join-combo__option${name === value ? " is-active" : ""}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => pick(name)}
+              >
+                {name}
+              </button>
+            ))
+          )}
         </div>
       ) : null}
     </div>
@@ -212,9 +196,8 @@ export function AddressDetailsFields({
       </label>
       <PlaceCombobox
         label="State"
-        sheetTitle="Select state"
         value={stateName}
-        placeholder="Select state"
+        placeholder="Type state"
         options={states}
         onChange={(name) => {
           onChangeState(name);
@@ -224,9 +207,8 @@ export function AddressDetailsFields({
       />
       <PlaceCombobox
         label="District"
-        sheetTitle="Select district"
         value={district}
-        placeholder="Select district"
+        placeholder="Type district"
         options={districts}
         disabled={!stateName}
         onChange={(name) => {
@@ -236,9 +218,8 @@ export function AddressDetailsFields({
       />
       <PlaceCombobox
         label="City"
-        sheetTitle="Select city"
         value={city}
-        placeholder="Select city"
+        placeholder="Type city"
         options={cities}
         disabled={!district}
         onChange={onChangeCity}

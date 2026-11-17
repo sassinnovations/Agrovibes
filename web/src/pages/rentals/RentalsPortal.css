@@ -107,9 +107,9 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background:
-    linear-gradient(120deg, rgba(201, 255, 53, 0.18), transparent 55%),
-    #303132;
+  background-color: #303132;
+  background-size: cover;
+  background-position: center;
 }
 
 .rentals-banner small {
@@ -197,7 +197,9 @@
   align-items: flex-end;
   padding: 12px;
   font-weight: 800;
-  background: #303132;
+  background-color: #303132;
+  background-size: cover;
+  background-position: center;
 }
 
 .rentals-tile span {

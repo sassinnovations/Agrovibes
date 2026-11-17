@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { fetchPublicRentals, type PublicRentalListing } from "../../api/rentals";
 import { useProviderJourney } from "../../components/provider/useProviderJourney";
-import { featuredRentalCategories, portalCategoryForListing, RENTAL_CATEGORIES, RENTAL_LOCATIONS } from "./rentalCatalog";
+import { featuredRentalCategories, RENTAL_CATEGORIES, RENTAL_LOCATIONS } from "./rentalCatalog";
 import "./RentalsPortal.css";
 
 const BANNERS = [
@@ -43,7 +42,6 @@ export function RentalsPortalPage() {
   const [location, setLocation] = useState("Add location");
   const [locationOpen, setLocationOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [listings, setListings] = useState<PublicRentalListing[]>([]);
   const categories = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const source = needle
@@ -51,27 +49,6 @@ export function RentalsPortalPage() {
       : featuredRentalCategories();
     return source;
   }, [query]);
-
-  useEffect(() => {
-    let active = true;
-    fetchPublicRentals(token)
-      .then((data) => {
-        if (!active) return;
-        setListings((data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved"));
-      })
-      .catch(() => {
-        if (active) setListings([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [token]);
-
-  const visibleListings = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return listings;
-    return listings.filter((row) => `${row.title} ${row.category} ${row.providerName}`.toLowerCase().includes(needle));
-  }, [listings, query]);
 
   return (
     <section className="rentals-portal">
@@ -115,7 +92,12 @@ export function RentalsPortalPage() {
 
       <div className="rentals-banners" id="find-equipment">
         {BANNERS.map((banner) => (
-          <Link key={banner.id} className="rentals-banner" to={`/rentals/${banner.id}?location=${encodeURIComponent(location)}`}>
+          <Link
+            key={banner.id}
+            className="rentals-banner"
+            style={{ backgroundImage: `linear-gradient(120deg, rgba(0,0,0,0.55), rgba(0,0,0,0.2)), url(${RENTAL_CATEGORIES.find((item) => item.id === banner.id)?.image || ""})` }}
+            to={`/rentals/${banner.id}?location=${encodeURIComponent(location)}`}
+          >
             <div>
               <small>{banner.kicker}</small>
               <strong>{banner.title}</strong>
@@ -145,36 +127,13 @@ export function RentalsPortalPage() {
           <Link
             key={item.id}
             className="rentals-tile"
-            style={{ background: item.wash }}
+            style={{ backgroundImage: `linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.72)), url(${item.image})` }}
             to={`/rentals/${item.id}?location=${encodeURIComponent(location)}`}
           >
             <span>{item.title}</span>
           </Link>
         ))}
       </div>
-
-      <div className="rentals-section-head">
-        <h2>Approved rentals</h2>
-      </div>
-      {visibleListings.length === 0 ? (
-        <p className="rentals-note">No approved provider listings yet. A listing shows here after admin approves it.</p>
-      ) : (
-        <div className="rentals-list">
-          {visibleListings.map((row) => (
-            <Link
-              key={row.id}
-              className="rentals-card"
-              to={`/rentals/${portalCategoryForListing(row.category, row.title)}?location=${encodeURIComponent(location)}`}
-            >
-              <strong>{row.title}</strong>
-              <p>
-                {row.providerName}
-                {row.category ? ` · ${row.category}` : ""}
-              </p>
-            </Link>
-          ))}
-        </div>
-      )}
     </section>
   );
 }
