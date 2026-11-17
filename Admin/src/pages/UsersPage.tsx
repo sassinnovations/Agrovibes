@@ -27,11 +27,44 @@ function formatJoined(value: unknown) {
   return d.toISOString().slice(0, 10);
 }
 
+function mapAccountStatus(value: unknown): AccountStatus {
+  const status = String(value || "active").toLowerCase();
+  if (status === "suspended" || status === "deactivated") return "Suspended";
+  if (status === "banned" || status === "deleted") return "Banned";
+  if (status === "pending") return "Pending";
+  return "Active";
+}
+
+function mapKycStatus(value: unknown): KycStatus {
+  const status = String(value || "").toLowerCase();
+  if (status === "approved" || status === "verified") return "Verified";
+  if (status === "rejected") return "Rejected";
+  return "Pending";
+}
+
 function mapApiUser(row: Record<string, unknown>): AdminUserProfile {
   const id = String(row.id ?? "");
   const role = String(row.role || "User");
-  const accountStatus = "Active" as AccountStatus;
-  const kycStatus = "Pending" as KycStatus;
+  const kycStatus = mapKycStatus(row.kycStatus);
+  const summary = String(row.kycSummary || "").trim();
+  const aadhaarLast4 = String(row.aadhaarLast4 || "").replace(/\D/g, "").slice(-4);
+  const kycItems = [];
+  if (summary) {
+    kycItems.push({
+      id: "verification",
+      label: "Verification",
+      value: summary,
+      status: kycStatus === "Pending" && !row.kycStatus ? "Pending" : kycStatus
+    });
+  }
+  if (aadhaarLast4) {
+    kycItems.push({
+      id: "aadhaar",
+      label: "Aadhaar",
+      value: `XXXX XXXX ${aadhaarLast4}`,
+      status: "Verified" as const
+    });
+  }
   return {
     id,
     name: String(row.fullName || row.username || "User"),
@@ -39,18 +72,18 @@ function mapApiUser(row: Record<string, unknown>): AdminUserProfile {
     avatarUrl: (row.avatarUrl as string | null | undefined) || null,
     userId: id ? `USR-${id}` : "—",
     role: role.charAt(0).toUpperCase() + role.slice(1),
-    region: String(row.locationLabel || "—"),
+    region: String(row.locationLabel || row.kycAddress || "—"),
     joined: formatJoined(row.createdAt),
-    kycStatus,
+    kycStatus: row.kycStatus ? kycStatus : "Pending",
     flags: 0,
-    accountStatus,
+    accountStatus: mapAccountStatus(row.accountStatus),
     phone: String(row.phone || "—"),
-    location: String(row.locationLabel || "—"),
+    location: String(row.locationLabel || row.kycAddress || "—"),
     farmerId: "—",
     pan: "—",
-    aadhaar: "—",
+    aadhaar: aadhaarLast4 ? `XXXX XXXX ${aadhaarLast4}` : "—",
     flagItems: [],
-    kycItems: []
+    kycItems
   };
 }
 
@@ -210,7 +243,17 @@ export function UsersPage() {
         </div>
       </div>
 
-      <UserProfileDrawer user={selected} open={!!selected} onClose={() => setSelected(null)} />
+      <UserProfileDrawer
+        user={selected}
+        open={!!selected}
+        token={token}
+        apiBase={API_BASE}
+        onClose={() => setSelected(null)}
+        onUpdated={(id, accountStatus) => {
+          setRows((current) => current.map((row) => (row.id === id ? { ...row, accountStatus } : row)));
+          setSelected((current) => (current && current.id === id ? { ...current, accountStatus } : current));
+        }}
+      />
     </AdminLayout>
   );
 }

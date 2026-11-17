@@ -37,6 +37,7 @@ export function KycVerificationPage() {
   const [preview, setPreview] = useState<{ docs: AdminKycDocument[]; index: number; applicant: string } | null>(
     null
   );
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!token) {
@@ -94,6 +95,7 @@ export function KycVerificationPage() {
   };
 
   const activeDoc = preview?.docs[preview.index] || null;
+  const selected = rows.find((row) => row.id === selectedId) || null;
 
   return (
     <AdminLayout
@@ -107,6 +109,96 @@ export function KycVerificationPage() {
     >
       <div className="kyc-page">
         {error ? <p className="kyc-error">{error}</p> : null}
+        {selected ? (
+          <section className="kyc-detail">
+            <div className="kyc-detail__head">
+              <div>
+                <h2>{selected.applicant}</h2>
+                <p>
+                  {roleLabel(selected.role)} · {registrationTypeLabel(selected.registrationType)}
+                </p>
+              </div>
+              <button type="button" className="kyc-detail__close" onClick={() => setSelectedId(null)}>
+                Close
+              </button>
+            </div>
+            <dl className="kyc-detail__facts">
+              <div>
+                <dt>Phone</dt>
+                <dd>{selected.phone || "—"}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd>{selected.email || selected.applicantEmail || "—"}</dd>
+              </div>
+              <div>
+                <dt>Address</dt>
+                <dd>{selected.address || "—"}</dd>
+              </div>
+              <div>
+                <dt>Business</dt>
+                <dd>{selected.businessName || "—"}</dd>
+              </div>
+              <div>
+                <dt>GST</dt>
+                <dd>{selected.gstNumber || "—"}</dd>
+              </div>
+              <div>
+                <dt>Submitted</dt>
+                <dd>{formatSubmitted(selected.submitted)}</dd>
+              </div>
+            </dl>
+            <p className="kyc-detail__summary">{selected.document || "No verification summary was saved."}</p>
+            {Array.isArray(selected.documents) && selected.documents.length > 0 ? (
+              <div className="kyc-docs">
+                {selected.documents.map((doc, index) => (
+                  <button
+                    key={`${selected.id}-${doc.key}-${index}`}
+                    type="button"
+                    className="kyc-doc-thumb"
+                    title={doc.label}
+                    onClick={() =>
+                      setPreview({
+                        docs: selected.documents || [],
+                        index,
+                        applicant: selected.applicant || "Applicant"
+                      })
+                    }
+                  >
+                    <img src={doc.url} alt={doc.label} />
+                    <span>{doc.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="kyc-muted">No document images were uploaded. This application was verified with DigiLocker.</p>
+            )}
+            {selected.status === "pending" ? (
+              <div className="kyc-actions">
+                <button
+                  type="button"
+                  className="kyc-btn kyc-btn--approve"
+                  disabled={busyId === selected.id}
+                  onClick={() => void onRespond(selected.id, "approve")}
+                >
+                  {busyId === selected.id ? "…" : "Approve"}
+                </button>
+                <button
+                  type="button"
+                  className="kyc-btn kyc-btn--reject"
+                  disabled={busyId === selected.id}
+                  onClick={() => void onRespond(selected.id, "reject")}
+                >
+                  Reject
+                </button>
+              </div>
+            ) : (
+              <span className={`kyc-status kyc-status--${selected.status}`}>
+                {selected.status === "approved" ? "Approved" : "Rejected"}
+              </span>
+            )}
+          </section>
+        ) : null}
         <div className="kyc-table-wrap">
           <table className="kyc-table">
             <thead>
@@ -142,7 +234,11 @@ export function KycVerificationPage() {
                 rows.map((row) => {
                   const docs = Array.isArray(row.documents) ? row.documents : [];
                   return (
-                    <tr key={row.id} className={row.status !== "pending" ? `kyc-row--${row.status}` : undefined}>
+                    <tr
+                      key={row.id}
+                      className={`${row.status !== "pending" ? `kyc-row--${row.status}` : ""} ${selectedId === row.id ? "is-selected" : ""}`.trim()}
+                      onClick={() => setSelectedId(row.id)}
+                    >
                       <td>
                         <div>{row.applicant}</div>
                         {row.businessName ? <small className="kyc-muted">{row.businessName}</small> : null}
@@ -187,7 +283,7 @@ export function KycVerificationPage() {
                       </td>
                       <td>
                         {row.status === "pending" ? (
-                          <div className="kyc-actions">
+                          <div className="kyc-actions" onClick={(event) => event.stopPropagation()}>
                             <button
                               type="button"
                               className="kyc-btn kyc-btn--approve"

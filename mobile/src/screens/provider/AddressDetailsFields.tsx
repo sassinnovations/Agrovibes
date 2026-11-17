@@ -1,9 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { FlatList, Modal, Pressable, Text, TextInput, View, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, Text, TextInput, View, StyleSheet } from "react-native";
 import { fetchLocationCities, fetchLocationDistricts, fetchLocationStates } from "../../services/api";
-import { APP_LIME } from "../../theme/appColors";
-import { PROVIDER_CARD, PROVIDER_MUTED, PROVIDER_TEXT, providerFormStyles as pf } from "./providerFormUi";
+import { PROVIDER_MUTED, PROVIDER_TEXT, providerFormStyles as pf } from "./providerFormUi";
 
 type Props = {
   address: string;
@@ -33,8 +31,6 @@ export function AddressDetailsFields({
   const [states, setStates] = useState<string[]>([]);
   const [districts, setDistricts] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]);
-  const [picker, setPicker] = useState<"state" | "district" | "city" | null>(null);
-  const [query, setQuery] = useState("");
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -87,34 +83,6 @@ export function AddressDetailsFields({
     };
   }, [stateName, district]);
 
-  const options = picker === "state" ? states : picker === "district" ? districts : cities;
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return options;
-    const starts = options.filter((name) => name.toLowerCase().startsWith(needle));
-    const contains = options.filter(
-      (name) => !name.toLowerCase().startsWith(needle) && name.toLowerCase().includes(needle)
-    );
-    return [...starts, ...contains];
-  }, [options, query]);
-  const openPicker = (next: "state" | "district" | "city") => {
-    setQuery("");
-    setPicker(next);
-  };
-  const choose = (value: string) => {
-    if (picker === "state") {
-      onChangeState(value);
-      onChangeDistrict("");
-      onChangeCity("");
-    } else if (picker === "district") {
-      onChangeDistrict(value);
-      onChangeCity("");
-    } else if (picker === "city") {
-      onChangeCity(value);
-    }
-    setPicker(null);
-  };
-
   return (
     <View>
       <Text style={[pf.sectionTitle, { marginTop: 14, fontSize: 18 }]}>Address details</Text>
@@ -126,20 +94,35 @@ export function AddressDetailsFields({
         placeholder="Enter address"
         placeholderTextColor={PROVIDER_MUTED}
       />
-      <SelectField label="State" value={stateName} placeholder="Select state" onPress={() => openPicker("state")} />
-      <SelectField
+      <PlaceField
+        label="State"
+        value={stateName}
+        placeholder="Type state"
+        options={states}
+        onChange={(name) => {
+          onChangeState(name);
+          onChangeDistrict("");
+          onChangeCity("");
+        }}
+      />
+      <PlaceField
         label="District"
         value={district}
-        placeholder="Select district"
+        placeholder="Type district"
+        options={districts}
         disabled={!stateName}
-        onPress={() => openPicker("district")}
+        onChange={(name) => {
+          onChangeDistrict(name);
+          onChangeCity("");
+        }}
       />
-      <SelectField
+      <PlaceField
         label="City"
         value={city}
-        placeholder="Select city"
+        placeholder="Type city"
+        options={cities}
         disabled={!district}
-        onPress={() => openPicker("city")}
+        onChange={onChangeCity}
       />
       <Text style={styles.label}>PIN code</Text>
       <TextInput
@@ -152,95 +135,104 @@ export function AddressDetailsFields({
         maxLength={6}
       />
       {loadError ? <Text style={styles.error}>{loadError}</Text> : null}
-      <Modal visible={picker !== null} animationType="slide" transparent onRequestClose={() => setPicker(null)}>
-        <Pressable style={styles.backdrop} onPress={() => setPicker(null)}>
-          <Pressable style={styles.sheet} onPress={() => undefined}>
-            <Text style={styles.sheetTitle}>
-              {picker === "state" ? "Select state" : picker === "district" ? "Select district" : "Select city"}
-            </Text>
-            <TextInput
-              style={styles.search}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Type to search"
-              placeholderTextColor={PROVIDER_MUTED}
-              autoCorrect={false}
-              autoCapitalize="words"
-            />
-            <FlatList
-              data={filtered}
-              keyExtractor={(item) => item}
-              keyboardShouldPersistTaps="handled"
-              renderItem={({ item }) => (
-                <Pressable style={styles.option} onPress={() => choose(item)}>
-                  <Text style={styles.optionText}>{item}</Text>
-                </Pressable>
-              )}
-              ListEmptyComponent={<Text style={styles.empty}>No places found.</Text>}
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
 
-function SelectField({
+function PlaceField({
   label,
   value,
   placeholder,
+  options,
   disabled,
-  onPress
+  onChange
 }: {
   label: string;
   value: string;
   placeholder: string;
+  options: string[];
   disabled?: boolean;
-  onPress: () => void;
+  onChange: (value: string) => void;
 }) {
+  const [text, setText] = useState(value);
+  const [focused, setFocused] = useState(false);
+  const picking = useRef(false);
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+  const shown = useMemo(() => {
+    const needle = text.trim().toLowerCase();
+    if (!needle) return [];
+    const starts = options.filter((name) => name.toLowerCase().startsWith(needle));
+    const contains = options.filter((name) => !name.toLowerCase().startsWith(needle) && name.toLowerCase().includes(needle));
+    return [...starts, ...contains];
+  }, [options, text]);
+  const open = focused && text.trim().length > 0;
+
   return (
-    <View>
+    <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable style={[styles.select, disabled && styles.selectOff]} onPress={onPress} disabled={disabled}>
-        <Text style={value ? styles.value : styles.placeholder}>{value || placeholder}</Text>
-        <Ionicons name="chevron-down" size={18} color={PROVIDER_MUTED} />
-      </Pressable>
+      <TextInput
+        style={[pf.input, disabled && styles.inputOff]}
+        value={text}
+        editable={!disabled}
+        placeholder={placeholder}
+        placeholderTextColor={PROVIDER_MUTED}
+        autoCorrect={false}
+        autoCapitalize="words"
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          if (!picking.current) setText(value);
+          picking.current = false;
+        }}
+        onChangeText={(next) => {
+          setText(next);
+          if (!next.trim()) onChange("");
+        }}
+      />
+      {open ? (
+        <View style={styles.menu}>
+          {shown.length === 0 ? (
+            <Text style={styles.empty}>No places found.</Text>
+          ) : (
+            shown.map((name) => (
+              <Pressable
+                key={name}
+                style={styles.option}
+                onPressIn={() => {
+                  picking.current = true;
+                  setText(name);
+                  onChange(name);
+                  setFocused(false);
+                }}
+              >
+                <Text style={[styles.optionText, name === value && styles.optionActive]}>{name}</Text>
+              </Pressable>
+            ))
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   label: { color: PROVIDER_TEXT, fontSize: 13, fontWeight: "600", marginBottom: 8 },
-  select: {
-    backgroundColor: PROVIDER_CARD,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
-  },
-  selectOff: { opacity: 0.55 },
-  value: { color: PROVIDER_TEXT, fontSize: 14, flex: 1 },
-  placeholder: { color: PROVIDER_MUTED, fontSize: 14, flex: 1 },
-  error: { color: "#ff8a80", fontSize: 13, marginBottom: 8 },
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
-  sheet: { maxHeight: "70%", backgroundColor: "#1a1a1a", borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 16 },
-  sheetTitle: { color: APP_LIME, fontSize: 16, fontWeight: "800", marginBottom: 8 },
-  search: {
-    backgroundColor: PROVIDER_CARD,
+  field: { marginBottom: 10, zIndex: 1 },
+  inputOff: { opacity: 0.55 },
+  menu: {
+    marginTop: 4,
+    maxHeight: 220,
+    backgroundColor: "#1a1a1a",
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.12)",
-    color: PROVIDER_TEXT,
-    paddingHorizontal: 12,
-    minHeight: 44,
-    marginBottom: 8
+    overflow: "hidden"
   },
-  option: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
+  option: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.08)" },
   optionText: { color: PROVIDER_TEXT, fontSize: 15 },
-  empty: { color: PROVIDER_MUTED, paddingVertical: 20 }
+  optionActive: { color: "#c9ff35" },
+  empty: { color: PROVIDER_MUTED, paddingVertical: 14, paddingHorizontal: 14 },
+  error: { color: "#ff8a80", fontSize: 13, marginBottom: 8 }
 });
