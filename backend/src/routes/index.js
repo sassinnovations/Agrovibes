@@ -11885,10 +11885,19 @@ router.post("/v1/provider/listings", authRequired, async (req, res) => {
     const category = String(req.body?.category || "Equipment").trim().slice(0, 80) || "Equipment";
     const channelRaw = String(req.body?.channel || "Rental").trim();
     const channel = ["Store", "Rental", "Services", "Educators"].includes(channelRaw) ? channelRaw : "Rental";
-    const rcNumber = String(req.body?.rcNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16) || null;
+    let rcNumber = String(req.body?.rcNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16) || null;
     if (rcNumber && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(rcNumber)) {
       res.status(400).json({ message: "Enter the RC number in the vehicle registration format, such as TS09AB1234." });
       return;
+    }
+    if (rcNumber) {
+      try {
+        const verified = await providerKycIdentity.verifyVehicleRc(rcNumber);
+        if (verified?.rcNumber) rcNumber = verified.rcNumber;
+      } catch (error) {
+        res.status(error.status || 422).json({ message: error.message || "Vehicle RC could not be verified." });
+        return;
+      }
     }
     if (title.length < 2) {
       res.status(400).json({ message: "Enter the listing name." });
