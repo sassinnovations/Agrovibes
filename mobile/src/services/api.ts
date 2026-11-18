@@ -341,6 +341,12 @@ export async function fetchLocationCities(state: string, district: string) {
   return (await parseJsonOrThrow(response)) as { cities: string[] };
 }
 
+export async function fetchLocationPin(state: string, district: string, city: string) {
+  const params = new URLSearchParams({ state, district, city });
+  const response = await fetch(`${API_BASE_URL}/v1/locations/pincode?${params.toString()}`);
+  return (await parseJsonOrThrow(response)) as { pinCode: string };
+}
+
 export async function fetchProviderMsg91Widget(token: string) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/phone/widget`, token)) as {
     widgetId: string;

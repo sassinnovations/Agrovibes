@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { fetchLocationCities, fetchLocationDistricts, fetchLocationStates } from "../../api/providerKyc";
+import { fetchLocationCities, fetchLocationDistricts, fetchLocationPin, fetchLocationStates } from "../../api/providerKyc";
 
 function filterPlaces(options: string[], query: string) {
   const needle = query.trim().toLowerCase();
@@ -186,6 +186,22 @@ export function AddressDetailsFields({
       active = false;
     };
   }, [stateName, district]);
+
+  useEffect(() => {
+    if (!stateName || !district || !city) return;
+    let active = true;
+    fetchLocationPin(stateName, district, city)
+      .then((result) => {
+        const pin = String(result.pinCode || "").replace(/\D/g, "").slice(0, 6);
+        if (active && pin.length === 6) onChangePin(pin);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+    // onChangePin is recreated by the parent each render; city/district/state are the lookup inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stateName, district, city]);
 
   return (
     <div className="join-address">

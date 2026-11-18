@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View, StyleSheet } from "react-native";
-import { fetchLocationCities, fetchLocationDistricts, fetchLocationStates } from "../../services/api";
+import { fetchLocationCities, fetchLocationDistricts, fetchLocationPin, fetchLocationStates } from "../../services/api";
 import { PROVIDER_MUTED, PROVIDER_TEXT, providerFormStyles as pf } from "./providerFormUi";
 
 type Props = {
@@ -83,6 +83,20 @@ export function AddressDetailsFields({
     };
   }, [stateName, district]);
 
+  useEffect(() => {
+    if (!stateName || !district || !city) return;
+    let active = true;
+    fetchLocationPin(stateName, district, city)
+      .then((result) => {
+        const pin = String(result.pinCode || "").replace(/\D/g, "").slice(0, 6);
+        if (active && pin.length === 6) onChangePin(pin);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [stateName, district, city, onChangePin]);
+
   return (
     <View>
       <Text style={[pf.sectionTitle, { marginTop: 14, fontSize: 18 }]}>Address details</Text>
@@ -103,6 +117,7 @@ export function AddressDetailsFields({
           onChangeState(name);
           onChangeDistrict("");
           onChangeCity("");
+          onChangePin("");
         }}
       />
       <PlaceField
@@ -114,6 +129,7 @@ export function AddressDetailsFields({
         onChange={(name) => {
           onChangeDistrict(name);
           onChangeCity("");
+          onChangePin("");
         }}
       />
       <PlaceField
@@ -122,7 +138,10 @@ export function AddressDetailsFields({
         placeholder="Type city"
         options={cities}
         disabled={!district}
-        onChange={onChangeCity}
+        onChange={(name) => {
+          onChangeCity(name);
+          onChangePin("");
+        }}
       />
       <Text style={styles.label}>PIN code</Text>
       <TextInput

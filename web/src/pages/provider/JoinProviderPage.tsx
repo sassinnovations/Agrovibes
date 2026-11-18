@@ -7,11 +7,10 @@ import {
   fetchProviderEquipment,
   fetchProviderKycStatus,
   startProviderDigilocker,
-  confirmProviderPhone,
-  sendProviderPhoneOtp,
   submitProviderKyc,
   verifyProviderPan
 } from "../../api/providerKyc";
+import { sendProviderOtpWithMsg91, verifyProviderOtpWithMsg91 } from "../../api/msg91Widget";
 import { SettingsIconBack } from "../../components/settings/SettingsIcons";
 import "../settings/SettingsMenuPage.css";
 import {
@@ -88,6 +87,7 @@ export function JoinProviderPage() {
   const [busy, setBusy] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [otpReqId, setOtpReqId] = useState("");
   const [kycStatus, setKycStatus] = useState<"idle" | "pending" | "verified" | "failed">(
     readProviderDraft().digilockerVerified ? "verified" : "idle"
   );
@@ -224,9 +224,18 @@ export function JoinProviderPage() {
     setBusy(true);
     setError("");
     try {
-      await sendProviderPhoneOtp(token, { phone: digits });
+      const sent = await sendProviderOtpWithMsg91(token, digits);
+      if (sent.verified) {
+        patch({ phoneOtpVerified: true });
+        setOtpReqId("");
+        setOtpSent(true);
+        return;
+      }
+      setOtpReqId(sent.reqId);
+      setOtp("");
       setOtpSent(true);
     } catch (err) {
+      setOtpSent(false);
       setError(err instanceof Error ? err.message : "Could not send OTP.");
     } finally {
       setBusy(false);
@@ -238,14 +247,15 @@ export function JoinProviderPage() {
       setError("Sign in again, then verify the mobile number.");
       return;
     }
+    const digits = draft.phone.replace(/\D/g, "").slice(-10);
+    if (!otpReqId) {
+      setError("Tap Get OTP, then enter the code.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const result = await confirmProviderPhone(token, { phone: draft.phone.replace(/\D/g, "").slice(-10), code: otp });
-      if (!result.verified) {
-        setError("That code was not accepted.");
-        return;
-      }
+      await verifyProviderOtpWithMsg91(token, digits, otpReqId, otp);
       patch({ phoneOtpVerified: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "That code was not accepted.");
@@ -561,6 +571,7 @@ export function JoinProviderPage() {
                 onChange={(event) => {
                   patch({ phone: event.target.value, phoneOtpVerified: false });
                   setOtpSent(false);
+                  setOtpReqId("");
                   setOtp("");
                 }}
               />
@@ -595,9 +606,9 @@ export function JoinProviderPage() {
               city={draft.village}
               pinCode={draft.pinCode}
               onChangeAddress={(street) => patch({ street })}
-              onChangeState={(state) => patch({ state, district: "", village: "" })}
-              onChangeDistrict={(district) => patch({ district, village: "" })}
-              onChangeCity={(village) => patch({ village })}
+              onChangeState={(state) => patch({ state, district: "", village: "", pinCode: "" })}
+              onChangeDistrict={(district) => patch({ district, village: "", pinCode: "" })}
+              onChangeCity={(village) => patch({ village, pinCode: "" })}
               onChangePin={(pinCode) => patch({ pinCode })}
             />
             {isBusiness ? (

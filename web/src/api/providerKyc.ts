@@ -19,6 +19,12 @@ export async function fetchLocationCities(state: string, district: string) {
   return (await parseJsonOrThrow(response)) as { cities: string[] };
 }
 
+export async function fetchLocationPin(state: string, district: string, city: string) {
+  const params = new URLSearchParams({ state, district, city });
+  const response = await fetchWithRetry(`${API_BASE_URL}/v1/locations/pincode?${params.toString()}`, { method: "GET" });
+  return (await parseJsonOrThrow(response)) as { pinCode: string };
+}
+
 export async function startProviderDigilocker(
   token: string,
   payload: { fullName?: string; phone?: string }
@@ -141,7 +147,10 @@ export async function sendProviderPhoneOtp(token: string, payload: { phone: stri
   })) as { success: boolean; phone: string; provider?: string; channel?: string };
 }
 
-export async function confirmProviderPhone(token: string, payload: { phone: string; code: string }) {
+export async function confirmProviderPhone(
+  token: string,
+  payload: { phone: string; code?: string; accessToken?: string }
+) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/phone/confirm`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

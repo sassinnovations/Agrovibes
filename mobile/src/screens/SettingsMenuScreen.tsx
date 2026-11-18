@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../auth/AuthContext";
-import { syncProviderRegistrationFromApi } from "../services/providerWorkflow";
 import { useLanguage } from "../localization/LanguageContext";
 import { APP_BLACK, APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../theme/appColors";
 import { AccountCenterBottomSheet } from "../components/accountCenter/AccountCenterBottomSheet";
@@ -102,7 +101,7 @@ function SettingsRowList({ items }: { items: SettingsRowItem[] }) {
 export function SettingsMenuScreen() {
   useAndroidNestedStackBack();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { signOut, token } = useAuth();
+  const { signOut } = useAuth();
   const { t, language } = useLanguage();
   const [accountCenterOpen, setAccountCenterOpen] = useState(false);
 
@@ -256,34 +255,6 @@ export function SettingsMenuScreen() {
             title={labels.accountCenter}
             subtitle={labels.accountCenterSub}
             onPress={() => setAccountCenterOpen(true)}
-            showDivider={false}
-          />
-        </SettingsSection>
-
-        <SettingsSection title="Provider">
-          <SettingsRow
-            icon="storefront-outline"
-            title="Open provider dashboard"
-            subtitle="Available after admin approves your KYC"
-            onPress={() => {
-              void (async () => {
-                const status = await syncProviderRegistrationFromApi(token).catch(() => "not_submitted" as const);
-                if (status === "approved") {
-                  navigation.navigate("ProviderMain");
-                  return;
-                }
-                if (status === "rejected") {
-                  navigation.navigate("ProviderOfferRole");
-                  return;
-                }
-                Alert.alert(
-                  status === "pending" ? "Waiting for admin" : "Provider registration",
-                  status === "pending"
-                    ? "Your application is with admin. Stay on the CropVibe feed until you get an approval or rejection notification."
-                    : "Use Become a Rental Provider on Home to choose what you offer."
-                );
-              })();
-            }}
             showDivider={false}
           />
         </SettingsSection>
@@ -537,68 +508,6 @@ const styles = StyleSheet.create({
   rowDivider: {
     height: 1,
     backgroundColor: DIVIDER
-  },
-  promoWrap: {
-    marginBottom: 16
-  },
-  promoCard: {
-    backgroundColor: "#1a1b1c",
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingTop: 20,
-    paddingBottom: 18,
-    overflow: "hidden",
-    minHeight: 132,
-    borderWidth: 1,
-    borderColor: "rgba(201, 255, 53, 0.12)"
-  },
-  promoGlowLeft: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: 120
-  },
-  promoGlowRight: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: 100
-  },
-  promoTitle: {
-    color: TEXT,
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-    lineHeight: 28
-  },
-  promoTitleAccent: {
-    color: LIME,
-    fontWeight: "800"
-  },
-  promoSubtitle: {
-    color: MUTED,
-    fontSize: 13,
-    fontWeight: "500",
-    marginTop: 6,
-    letterSpacing: 0.1
-  },
-  promoCta: {
-    alignSelf: "flex-start",
-    marginTop: 16,
-    backgroundColor: "#0d0d0d",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(201, 255, 53, 0.28)"
-  },
-  promoCtaText: {
-    color: LIME,
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.1
   },
   footerSection: {
     marginTop: 8,

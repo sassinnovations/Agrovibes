@@ -1884,11 +1884,17 @@ async function verifyMsg91AccessToken(accessToken) {
 async function verifyMsg91WidgetOtp(reqId, code) {
   const authKey = msg91AuthKey();
   const widgetId = msg91WidgetId();
-  if (!authKey || !widgetId || !reqId) return false;
+  const tokenAuth = msg91WidgetToken();
+  if ((!authKey && !tokenAuth) || !widgetId || !reqId) return false;
   const response = await fetch("https://control.msg91.com/api/v5/widget/verifyOtp", {
     method: "POST",
-    headers: { "Content-Type": "application/json", authkey: authKey },
-    body: JSON.stringify({ widgetId, reqId: String(reqId), otp: String(code) })
+    headers: { "Content-Type": "application/json", ...(authKey ? { authkey: authKey } : {}) },
+    body: JSON.stringify({
+      widgetId,
+      reqId: String(reqId),
+      otp: String(code),
+      ...(tokenAuth ? { tokenAuth } : {})
+    })
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) return false;
@@ -1908,30 +1914,64 @@ function msg91SendError(payload, fallback) {
   return message;
 }
 
-async function sendMsg91WidgetOtp(phone, authKey, widgetId) {
-  const identifier = phoneDigitsOnly(phone);
-  const response = await fetch("https://control.msg91.com/api/v5/widget/sendOtp", {
+async function postMsg91Widget(url, { authKey, body }) {
+  const headers = { "Content-Type": "application/json", Accept: "application/json" };
+  if (authKey) headers.authkey = authKey;
+  const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json", authkey: authKey },
-    body: JSON.stringify({ widgetId, identifier })
+    headers,
+    body: JSON.stringify(body)
   });
   const payload = await response.json().catch(() => null);
+  return { response, payload };
+}
+
+function msg91WidgetRequestId(payload) {
   const resultType = String(payload?.type || "").toLowerCase();
-  if (!response.ok || resultType === "error") {
-    throw new Error(msg91SendError(payload, "Failed to send OTP"));
-  }
-  const providerRequestId = String(
-    payload?.reqId || payload?.request_id || payload?.requestId || (resultType === "success" ? payload?.message : "") || ""
-  );
-  if (!providerRequestId) {
-    throw new Error("MSG91 did not return an OTP request id.");
-  }
   return {
-    channel: "sms",
-    providerRequestId,
-    providerStatus: String(payload?.type || payload?.status || "accepted"),
-    providerMessage: "OTP sent"
+    resultType,
+    providerRequestId: String(
+      payload?.reqId || payload?.request_id || payload?.requestId || (resultType === "success" ? payload?.message : "") || ""
+    )
   };
+}
+
+async function sendMsg91WidgetOtp(phone, authKey, widgetId) {
+  const identifier = phoneDigitsOnly(phone);
+  const tokenAuth = msg91WidgetToken();
+  // sendOtp is a web request. This widget rejects it with
+  // "Web requests are not allowed for this widget." sendOtpMobile uses the widget token.
+  const attempts = [];
+  if (tokenAuth) {
+    attempts.push({
+      url: "https://control.msg91.com/api/v5/widget/sendOtpMobile",
+      authKey: "",
+      body: { widgetId, tokenAuth, identifier }
+    });
+  }
+  attempts.push({
+    url: "https://control.msg91.com/api/v5/widget/sendOtp",
+    authKey,
+    body: { widgetId, identifier }
+  });
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    const { response, payload } = await postMsg91Widget(attempt.url, attempt);
+    const { resultType, providerRequestId } = msg91WidgetRequestId(payload);
+    if (response.ok && resultType !== "error" && providerRequestId) {
+      return {
+        channel: "sms",
+        providerRequestId,
+        providerStatus: String(payload?.type || payload?.status || "accepted"),
+        providerMessage: "OTP sent"
+      };
+    }
+    const message = msg91SendError(payload, "Failed to send OTP");
+    lastError = new Error(message);
+    if (!/web requests are not allowed/i.test(message)) break;
+  }
+  throw lastError || new Error("Failed to send OTP");
 }
 
 async function sendSmsOtp(phone, otp, options = {}) {
@@ -4259,6 +4299,7 @@ router.post("/v1/auth/phone/reset-password", async (req, res) => {
 });
 
 const { listStates, listDistricts, listCities } = require("../indiaLocations");
+const { lookupPostalPin } = require("../postalPin");
 
 router.get("/v1/locations/states", (_req, res) => {
   res.json({ states: listStates() });
@@ -4281,6 +4322,18 @@ router.get("/v1/locations/cities", (req, res) => {
     return;
   }
   res.json({ cities: listCities(state, district) });
+});
+
+router.get("/v1/locations/pincode", async (req, res) => {
+  const state = String(req.query.state || "").trim();
+  const district = String(req.query.district || "").trim();
+  const city = String(req.query.city || "").trim();
+  if (!state || !district || !city) {
+    res.status(400).json({ message: "Choose a state, district, and city first." });
+    return;
+  }
+  const pinCode = await lookupPostalPin({ state, district, city });
+  res.json({ pinCode });
 });
 
 router.get("/v1/places/maps-config", authRequired, mapsConfigHandler);
