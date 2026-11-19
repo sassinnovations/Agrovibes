@@ -3,13 +3,15 @@ const { query } = require("./db");
 
 let identityReady = false;
 
-const SUREPASS_PRODUCTION_BASE = "https://kyc-api.surepass.app";
+const SUREPASS_PRODUCTION_BASE = "https://kyc-api.surepass.io";
 
 function surepassBase() {
   const configured = String(process.env.SUREPASS_BASE_URL || "").trim().replace(/\/$/, "");
-  if (configured && configured !== "https://kyc-api.surepass.io") return configured;
+  // A production token is rejected on kyc-api.surepass.app. Surepass requires kyc-api.surepass.io.
+  if (configured === "https://kyc-api.surepass.app") return SUREPASS_PRODUCTION_BASE;
+  if (configured) return configured;
   const env = String(process.env.SUREPASS_ENV || "").trim().toLowerCase();
-  if (env === "sandbox" || env === "test") return "https://sandbox.surepass.app";
+  if (env === "sandbox" || env === "test") return "https://sandbox.surepass.io";
   return SUREPASS_PRODUCTION_BASE;
 }
 
