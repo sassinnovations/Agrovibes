@@ -68,8 +68,8 @@
   background: #121212;
 }
 
-.users-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
+.users-table tbody tr:hover:not(:has(.users-empty)) {
+  background: #95c80a0d;
 }
 
 .users-row {
