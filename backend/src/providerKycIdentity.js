@@ -4,15 +4,35 @@ const { query } = require("./db");
 let identityReady = false;
 
 const SUREPASS_PRODUCTION_BASE = "https://kyc-api.surepass.io";
+const SUREPASS_HOSTS = [
+  "https://kyc-api.surepass.io",
+  "https://sandbox.surepass.io",
+  "https://kyc-api.surepass.app",
+  "https://sandbox.surepass.app"
+];
+let surepassHostThatWorked = "";
 
 function surepassBase() {
+  if (surepassHostThatWorked) return surepassHostThatWorked;
   const configured = String(process.env.SUREPASS_BASE_URL || "").trim().replace(/\/$/, "");
-  // A production token is rejected on kyc-api.surepass.app. Surepass requires kyc-api.surepass.io.
   if (configured === "https://kyc-api.surepass.app") return SUREPASS_PRODUCTION_BASE;
   if (configured) return configured;
   const env = String(process.env.SUREPASS_ENV || "").trim().toLowerCase();
   if (env === "sandbox" || env === "test") return "https://sandbox.surepass.io";
   return SUREPASS_PRODUCTION_BASE;
+}
+
+function surepassHostOrder() {
+  const hosts = [surepassBase()];
+  for (const host of SUREPASS_HOSTS) {
+    if (!hosts.includes(host)) hosts.push(host);
+  }
+  return hosts;
+}
+
+function surepassTokenRejected(payload) {
+  const message = String(payload?.message || payload?.data?.message || "");
+  return /token\(signature\) is invalid/i.test(message);
 }
 
 function surepassToken() {
@@ -152,28 +172,43 @@ async function ensureProviderKycIdentity() {
   identityReady = true;
 }
 
-async function surepassRequest(path, body) {
+async function surepassFetch(path, { method = "POST", body } = {}) {
   const token = surepassToken();
   if (!token) {
     const error = new Error("Surepass is not configured");
     error.status = 503;
     throw error;
   }
-  let response;
-  try {
-    response = await fetch(`${surepassBase()}${path}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(25000)
-    });
-  } catch {
-    throw providerError("Surepass did not respond. Try again in a moment.", 504);
+  let last = null;
+  for (const host of surepassHostOrder()) {
+    let response;
+    try {
+      response = await fetch(`${host}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {})
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(25000)
+      });
+    } catch {
+      continue;
+    }
+    const payload = await response.json().catch(() => null);
+    last = { response, payload, host };
+    if (!surepassTokenRejected(payload)) {
+      surepassHostThatWorked = host;
+      return last;
+    }
   }
-  const payload = await response.json().catch(() => null);
+  if (!last) throw providerError("Surepass did not respond. Try again in a moment.", 504);
+  return last;
+}
+
+async function surepassRequest(path, body) {
+  const { response, payload } = await surepassFetch(path, { method: "POST", body });
   return { response, payload };
 }
 
@@ -348,13 +383,11 @@ async function setDigilockerKycStatus(userId, sessionId, status, message) {
 }
 
 async function pullSurepassDigilockerStatus(clientId) {
-  const token = surepassToken();
-  const response = await fetch(
-    `${surepassBase()}/api/v1/digilocker/status/${encodeURIComponent(clientId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const { response, payload } = await surepassFetch(
+    `/api/v1/digilocker/status/${encodeURIComponent(clientId)}`,
+    { method: "GET" }
   );
   if (response.status === 404) return { state: "unknown" };
-  const payload = await response.json().catch(() => null);
   if (!response.ok) return { state: "pending" };
   const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
   const raw = String(data.status || data.state || "").toLowerCase();
@@ -619,12 +652,10 @@ async function pullSurepassAadhaar(clientId) {
   if (posted.response.ok && posted.payload?.success !== false) {
     return pickAadhaarProfile(posted.payload);
   }
-  const token = surepassToken();
-  const response = await fetch(
-    `${surepassBase()}/api/v1/digilocker/download-aadhaar/${encodeURIComponent(clientId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const { response, payload } = await surepassFetch(
+    `/api/v1/digilocker/download-aadhaar/${encodeURIComponent(clientId)}`,
+    { method: "GET" }
   );
-  const payload = await response.json().catch(() => null);
   if (!response.ok || payload?.success === false) return null;
   return pickAadhaarProfile(payload);
 }
