@@ -219,6 +219,16 @@
   padding: 14px;
 }
 
+.rentals-card__photo {
+  display: block;
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  background: #262626;
+}
+
 .rentals-card strong {
   display: block;
   font-size: 16px;
