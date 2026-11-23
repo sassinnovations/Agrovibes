@@ -8,6 +8,9 @@ export type PublicRentalListing = {
   status: string;
   createdAt: string;
   providerName: string;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
 };
 
 export async function fetchPublicRentals(token: string | null) {
