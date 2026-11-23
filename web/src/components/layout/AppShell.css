@@ -16,7 +16,7 @@
 }
 
 .app-shell--provider .app-shell__main {
-  margin-left: 0;
+  margin-left: var(--sidebar-width-expanded);
 }
 
 .app-shell--provider .app-shell__content {

@@ -15,7 +15,7 @@ export function AppShell() {
 
   return (
     <div className={`app-shell${providerApp ? " app-shell--provider" : ""}`}>
-      {providerApp ? null : <Sidebar />}
+      <Sidebar />
       <div className={`app-shell__main${showRightPanel ? " app-shell__main--with-right" : ""}`}>
         <div
           className={`app-shell__content${flushContent ? " app-shell__content--flush" : ""}${notificationsView ? " app-shell__content--notifications" : ""}`}

@@ -14,7 +14,7 @@ import { RENTAL_CATEGORIES } from "./rentalCategories";
 import { RENTAL_CATALOG_SUBS } from "./rentalCatalog";
 import { getRentalCart, type RentalCartLine } from "./rentalCart";
 
-const FEATURED = ["machinery", "drone", "labour", "soil"];
+const FEATURED = ["machinery", "land", "drone", "labour", "soil"];
 const LOGO = require("../../../assets/crop vibe.png");
 const BANNERS = [
   {

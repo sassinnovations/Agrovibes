@@ -23,27 +23,32 @@ export function ProviderListingScreen() {
   const { token } = useAuth();
   const [registrationStatus, setRegistrationStatus] = useState<ProviderApprovalStatus>("not_submitted");
   const [listings, setListings] = useState<ProviderListingRecord[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const synced = await syncProviderRegistrationFromApi(token);
+      const nextListings = await uploadLocalListings(token).catch(() => getProviderListings());
+      setRegistrationStatus(synced);
+      setListings(nextListings);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      const load = async () => {
-        const synced = await syncProviderRegistrationFromApi(token);
-        const nextListings = await uploadLocalListings(token).catch(() => getProviderListings());
-        if (!active) return;
-        setRegistrationStatus(synced);
-        setListings(nextListings);
-      };
       void load();
-      return () => {
-        active = false;
-      };
-    }, [token])
+    }, [load])
   );
 
   return (
     <View style={styles.screen}>
       <ProviderChromeHeader />
+      <Pressable style={styles.refreshBtn} onPress={() => void load()} disabled={refreshing}>
+        <Text style={styles.refreshText}>{refreshing ? "Refreshing…" : "Refresh status"}</Text>
+      </Pressable>
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Your listings</Text>
         <Text style={styles.sub}>Create a rental, service, store, or educator listing.</Text>
@@ -87,11 +92,13 @@ export function ProviderListingScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
+  refreshBtn: { alignSelf: "flex-end", marginRight: 16, marginTop: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  refreshText: { color: APP_LIME, fontSize: 13, fontWeight: "700" },
   body: {
     alignItems: "center",
     paddingHorizontal: 28,
     paddingTop: 28,
-    paddingBottom: 120
+    paddingBottom: 32
   },
   title: { color: APP_LIME, fontSize: 22, fontWeight: "800" },
   sub: {

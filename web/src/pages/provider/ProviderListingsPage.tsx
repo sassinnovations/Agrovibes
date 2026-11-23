@@ -10,28 +10,33 @@ export function ProviderListingsPage() {
   const [rows, setRows] = useState<ProviderListing[]>([]);
   const [status, setStatus] = useState("not_submitted");
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = async () => {
+    if (!token) return;
+    setRefreshing(true);
+    try {
+      const [kyc, listed] = await Promise.all([fetchProviderKycStatus(token), fetchProviderListings(token)]);
+      setStatus(kyc.status);
+      setRows(listed.listings || []);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load listings.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    if (!token) return;
-    let active = true;
-    const load = async () => {
-      try {
-        const [kyc, listed] = await Promise.all([fetchProviderKycStatus(token), fetchProviderListings(token)]);
-        if (!active) return;
-        setStatus(kyc.status);
-        setRows(listed.listings || []);
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Could not load listings.");
-      }
-    };
     void load();
-    return () => {
-      active = false;
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return (
     <section className="provider-panel">
+      <button type="button" className="provider-btn" onClick={() => void load()} disabled={refreshing || !token}>
+        {refreshing ? "Refreshing…" : "Refresh status"}
+      </button>
       <h1>Your listings</h1>
       <p>Create a rental, service, store, or educator listing.</p>
       {status !== "approved" ? (
@@ -44,7 +49,7 @@ export function ProviderListingsPage() {
       {error ? <p className="provider-error">{error}</p> : null}
       <div className="provider-list">
         {rows.map((row) => {
-          const photo = listingImage(row.id);
+          const photo = row.imageUrl || listingImage(row.id);
           return (
             <article key={row.id} className="provider-card">
               {photo ? <img className="provider-card__photo" src={photo} alt="" /> : null}

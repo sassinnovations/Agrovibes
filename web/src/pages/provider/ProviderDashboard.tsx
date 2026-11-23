@@ -1,18 +1,7 @@
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import "./ProviderDashboard.css";
 
-const TABS = [
-  { to: "/provider", label: "Overview", end: true },
-  { to: "/provider/rental", label: "Rental", end: false },
-  { to: "/provider/listings", label: "Listing", end: false },
-  { to: "/provider/services", label: "Services", end: false },
-  { to: "/provider/profile", label: "Profile", end: false }
-] as const;
-
 export function ProviderDashboard() {
-  const { pathname } = useLocation();
-  const creating = pathname === "/provider/listings/new";
-
   return (
     <div className="provider-app">
       <header className="provider-app__top">
@@ -36,18 +25,6 @@ export function ProviderDashboard() {
       <div className="provider-app__body">
         <Outlet />
       </div>
-      <nav className="provider-tabs" aria-label="Provider">
-        {TABS.map((tab) => (
-          <NavLink
-            key={tab.to}
-            to={creating && tab.to === "/provider/listings" ? "/provider/listings/new" : tab.to}
-            end={tab.end}
-            className={({ isActive }) => `provider-tabs__item${isActive || (creating && tab.label === "Listing") ? " is-active" : ""}`}
-          >
-            <span>{tab.label}</span>
-          </NavLink>
-        ))}
-      </nav>
     </div>
   );
 }
