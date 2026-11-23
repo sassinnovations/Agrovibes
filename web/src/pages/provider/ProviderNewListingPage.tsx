@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchProviderKycStatus, submitProviderListing } from "../../api/providerKyc";
+import { uploadImageFile } from "../../api/uploads";
 import { saveListingImage } from "./listingImages";
 
 const CHANNELS = ["Rental", "Services", "Store", "Educators"] as const;
@@ -14,11 +15,14 @@ export function ProviderNewListingPage() {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [channel, setChannel] = useState<(typeof CHANNELS)[number]>("Rental");
   const [photo, setPhoto] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [dailyRate, setDailyRate] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const onPhoto = (file: File | undefined) => {
     if (!file) return;
+    setPhotoFile(file);
     const reader = new FileReader();
     reader.onload = () => setPhoto(typeof reader.result === "string" ? reader.result : "");
     reader.readAsDataURL(file);
@@ -34,12 +38,21 @@ export function ProviderNewListingPage() {
         setError("Admin must approve your provider registration before a listing can be submitted.");
         return;
       }
+      let imageUrl = "";
+      if (photoFile) {
+        const uploaded = await uploadImageFile(photoFile);
+        imageUrl = uploaded.url;
+      }
       const created = await submitProviderListing(token, {
         title: title.trim(),
         category,
-        channel
+        channel,
+        imageUrl: imageUrl || undefined,
+        dailyRate: dailyRate.trim() || undefined,
+        rateUnit: "Day"
       });
-      if (photo && created.listing?.id) saveListingImage(created.listing.id, photo);
+      if (imageUrl && created.listing?.id) saveListingImage(created.listing.id, imageUrl);
+      else if (photo && created.listing?.id) saveListingImage(created.listing.id, photo);
       navigate(channel === "Services" ? "/provider/services" : "/provider/rental");
     } catch (err) {
       setError(err instanceof Error ? err.message : "The listing was not sent to admin.");
@@ -71,6 +84,10 @@ export function ProviderNewListingPage() {
             <option key={item}>{item}</option>
           ))}
         </select>
+      </label>
+      <label>
+        Rate (₹)
+        <input value={dailyRate} onChange={(event) => setDailyRate(event.target.value)} inputMode="decimal" placeholder="800" />
       </label>
       <label>
         Photo

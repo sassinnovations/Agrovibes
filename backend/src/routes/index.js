@@ -6765,7 +6765,7 @@ router.get("/v1/marketplace/listings", async (_req, res) => {
         l.id,
         l.title AS "cropName",
         COALESCE(NULLIF(u.full_name, ''), NULLIF(l.category, ''), l.channel, 'Provider') AS district,
-        0::numeric AS "pricePerKg",
+        COALESCE(l.daily_rate, 0)::numeric AS "pricePerKg",
         true AS "verifiedOnly",
         CASE
           WHEN lower(COALESCE(l.channel, '')) IN ('services', 'service') THEN 'services'
@@ -11858,6 +11858,20 @@ async function ensureProviderListingsTable() {
   );
   await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS rc_number TEXT`);
   await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS removal_reason TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS image_url TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS daily_rate NUMERIC`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS rate_unit TEXT`);
+}
+
+function listingMoney(value) {
+  const amount = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function listingImageUrl(value) {
+  const url = String(value || "").trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+  return url.slice(0, 500);
 }
 
 function adminListingCategory(channel) {
@@ -11885,6 +11899,9 @@ router.post("/v1/provider/listings", authRequired, async (req, res) => {
     const category = String(req.body?.category || "Equipment").trim().slice(0, 80) || "Equipment";
     const channelRaw = String(req.body?.channel || "Rental").trim();
     const channel = ["Store", "Rental", "Services", "Educators"].includes(channelRaw) ? channelRaw : "Rental";
+    const imageUrl = listingImageUrl(req.body?.imageUrl);
+    const dailyRate = listingMoney(req.body?.dailyRate);
+    const rateUnit = String(req.body?.rateUnit || "").trim().slice(0, 40) || null;
     let rcNumber = String(req.body?.rcNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16) || null;
     if (rcNumber && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(rcNumber)) {
       res.status(400).json({ message: "Enter the RC number in the vehicle registration format, such as TS09AB1234." });
@@ -11922,11 +11939,11 @@ router.post("/v1/provider/listings", authRequired, async (req, res) => {
     await ensureProviderListingsTable();
     const inserted = await query(
       `
-      INSERT INTO provider_listings (user_id, title, category, channel, status, rc_number)
-      VALUES ($1, $2, $3, $4, 'pending', $5)
-      RETURNING id, title, category, channel, status, rc_number AS "rcNumber", created_at AS "createdAt"
+      INSERT INTO provider_listings (user_id, title, category, channel, status, rc_number, image_url, daily_rate, rate_unit)
+      VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8)
+      RETURNING id, title, category, channel, status, rc_number AS "rcNumber", image_url AS "imageUrl", daily_rate AS "dailyRate", rate_unit AS "rateUnit", created_at AS "createdAt"
       `,
-      [userId, title, category, channel, rcNumber]
+      [userId, title, category, channel, rcNumber, imageUrl, dailyRate, rateUnit]
     );
     res.status(201).json({ listing: inserted.rows[0] });
   } catch (error) {
@@ -11947,6 +11964,9 @@ router.get("/v1/rentals/listings", authOptional, async (req, res) => {
         l.category,
         l.channel,
         l.status,
+        l.image_url AS "imageUrl",
+        l.daily_rate AS "dailyRate",
+        l.rate_unit AS "rateUnit",
         l.created_at AS "createdAt",
         COALESCE(u.full_name, 'Provider') AS "providerName"
       FROM provider_listings l
@@ -11964,6 +11984,44 @@ router.get("/v1/rentals/listings", authOptional, async (req, res) => {
   }
 });
 
+router.patch("/v1/provider/listings/:id", authRequired, async (req, res) => {
+  try {
+    const userId = Number(req.user.userId);
+    const listingId = Number(req.params.id);
+    if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(listingId) || listingId <= 0) {
+      res.status(400).json({ message: "Invalid listing" });
+      return;
+    }
+    const imageUrl = listingImageUrl(req.body?.imageUrl);
+    const dailyRate = listingMoney(req.body?.dailyRate);
+    const rateUnit = String(req.body?.rateUnit || "").trim().slice(0, 40) || null;
+    if (!imageUrl && !dailyRate && !rateUnit) {
+      res.status(400).json({ message: "Nothing to update" });
+      return;
+    }
+    await ensureProviderListingsTable();
+    const updated = await query(
+      `
+      UPDATE provider_listings
+      SET
+        image_url = COALESCE($3, image_url),
+        daily_rate = COALESCE($4, daily_rate),
+        rate_unit = COALESCE($5, rate_unit)
+      WHERE id = $1 AND user_id = $2
+      RETURNING id, image_url AS "imageUrl", daily_rate AS "dailyRate", rate_unit AS "rateUnit"
+      `,
+      [listingId, userId, imageUrl, dailyRate, rateUnit]
+    );
+    if (!updated.rows[0]) {
+      res.status(404).json({ message: "Listing not found" });
+      return;
+    }
+    res.json({ listing: updated.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update listing", error: error?.message || String(error) });
+  }
+});
+
 router.get("/v1/provider/listings", authRequired, async (req, res) => {
   try {
     const userId = Number(req.user.userId);
@@ -11974,7 +12032,7 @@ router.get("/v1/provider/listings", authRequired, async (req, res) => {
     await ensureProviderListingsTable();
     const result = await query(
       `
-      SELECT id, title, category, channel, status, rc_number AS "rcNumber", created_at AS "createdAt"
+      SELECT id, title, category, channel, status, rc_number AS "rcNumber", image_url AS "imageUrl", daily_rate AS "dailyRate", rate_unit AS "rateUnit", created_at AS "createdAt"
       FROM provider_listings
       WHERE user_id = $1
       ORDER BY created_at DESC

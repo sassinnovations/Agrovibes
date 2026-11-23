@@ -100,6 +100,9 @@ export type ProviderListing = {
   channel: string;
   status: string;
   rcNumber?: string | null;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
   createdAt: string;
 };
 
@@ -111,7 +114,15 @@ export async function fetchProviderListings(token: string) {
 
 export async function submitProviderListing(
   token: string,
-  payload: { title: string; category: string; channel: string; rcNumber?: string }
+  payload: {
+    title: string;
+    category: string;
+    channel: string;
+    rcNumber?: string;
+    imageUrl?: string;
+    dailyRate?: string | number;
+    rateUnit?: string;
+  }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {
     method: "POST",

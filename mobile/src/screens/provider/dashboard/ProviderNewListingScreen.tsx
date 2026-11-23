@@ -1299,12 +1299,16 @@ export function ProviderNewListingScreen() {
     }
     const listingTitle = equipmentName.trim() || selectedAssetMeta?.title || "Untitled listing";
     const listingCategory = selectedAssetMeta?.title || (isService ? "Service" : "Rental");
+    const publishedRate = (dailyRate.trim() || (isMachinery ? priceHr.trim() : "")).replace(/,/g, "");
+    const publishedUnit = !dailyRate.trim() && isMachinery && priceHr.trim() ? "Hour" : rateUnit;
     try {
       await submitListingForApproval({
         title: listingTitle,
         category: listingCategory,
         channel,
         imageUri: photos[0]?.uri,
+        dailyRate: publishedRate,
+        rateUnit: publishedUnit,
         token
       });
     } catch (error) {

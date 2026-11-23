@@ -142,7 +142,7 @@ function ProviderSidebar() {
   const { signOut } = useAuth();
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar sidebar--open">
       <div className="sidebar__inner">
         <NavLink to="/" className="sidebar__logo" title="Cropvibe feed">
           <img src="/cropvibefavicon.png" alt="" className="sidebar__logo-icon" />

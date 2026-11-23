@@ -39,6 +39,7 @@ function rupee(n: number) {
 
 function unitPrice(item: RentalCatalogItem) {
   if (item.price <= 0) return "Rate on request";
+  if (item.reviewLabel === "New") return `${rupee(item.price)}/${item.unitLabel}`;
   return `${rupee(Math.max(1, Math.round(item.price / 10)))}/${item.unitLabel}`;
 }
 
@@ -48,10 +49,15 @@ function liveListingToCatalog(row: {
   category: string;
   channel: string;
   providerName?: string;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
 }): RentalCatalogItem {
   const categoryId = portalCategoryForListing(row.category, row.title);
   const cover = RENTAL_CATALOG_SUBS[categoryId]?.[0];
   const provider = row.providerName?.trim();
+  const price = Number(String(row.dailyRate ?? "").replace(/[^0-9.]/g, "")) || 0;
+  const uploaded = String(row.imageUrl || "").trim();
   return {
     id: String(row.id),
     categoryId,
@@ -65,10 +71,10 @@ function liveListingToCatalog(row: {
     tag: "Approved",
     options: ["Book"],
     discountPct: 0,
-    price: 0,
-    mrp: 0,
-    unitLabel: "Booking",
-    image: cover?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image
+    price,
+    mrp: price,
+    unitLabel: row.rateUnit || "Booking",
+    image: uploaded ? { uri: uploaded } : cover?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image
   };
 }
 

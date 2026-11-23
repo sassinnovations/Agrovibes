@@ -996,6 +996,9 @@ export async function fetchRentalListings(token?: string | null) {
       category: string;
       channel: string;
       status: string;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
       createdAt: string;
       providerName: string;
     }>;
@@ -1011,6 +1014,9 @@ export async function fetchProviderListings(token: string) {
       channel: string;
       status: string;
       rcNumber?: string | null;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
       createdAt: string;
     }>;
   };
@@ -1027,15 +1033,47 @@ export async function submitRentalBooking(
   })) as { booking: { id: number } };
 }
 
+export async function updateProviderListing(
+  token: string,
+  listingId: string | number,
+  payload: { imageUrl?: string; dailyRate?: string | number; rateUnit?: string }
+) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings/${listingId}`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })) as { listing: { id: number; imageUrl?: string | null; dailyRate?: number | string | null; rateUnit?: string | null } };
+}
+
 export async function submitProviderListing(
   token: string,
-  payload: { title: string; category: string; channel: string; rcNumber?: string }
+  payload: {
+    title: string;
+    category: string;
+    channel: string;
+    rcNumber?: string;
+    imageUrl?: string;
+    dailyRate?: string | number;
+    rateUnit?: string;
+  }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  })) as { listing: { id: number; title: string; category: string; channel: string; status: string; createdAt: string } };
+  })) as {
+    listing: {
+      id: number;
+      title: string;
+      category: string;
+      channel: string;
+      status: string;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
+      createdAt: string;
+    };
+  };
 }
 
 export async function submitProviderKyc(
