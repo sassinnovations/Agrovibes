@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
   fetchProviderBookings,
@@ -9,6 +9,7 @@ import {
 } from "../../api/providerKyc";
 import { listingImage } from "./listingImages";
 import { listingStatusText } from "./providerStatus";
+import { usePullToRefresh } from "./usePullToRefresh";
 
 type Tab = "inventory" | "bookings" | "payments" | "reports";
 
@@ -19,11 +20,10 @@ export function ProviderRentalPage() {
   const [bookings, setBookings] = useState<ProviderBooking[]>([]);
   const [status, setStatus] = useState("not_submitted");
   const [error, setError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
+  const pageRef = useRef<HTMLElement>(null);
 
   const load = async () => {
     if (!token) return;
-    setRefreshing(true);
     try {
       const [kyc, listed, booked] = await Promise.all([
         fetchProviderKycStatus(token),
@@ -36,10 +36,10 @@ export function ProviderRentalPage() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load rentals.");
-    } finally {
-      setRefreshing(false);
     }
   };
+
+  const pull = usePullToRefresh(pageRef, load);
 
   useEffect(() => {
     void load();
@@ -48,10 +48,8 @@ export function ProviderRentalPage() {
   }, [token]);
 
   return (
-    <section className="provider-panel">
-      <button type="button" className="provider-btn" onClick={() => void load()} disabled={refreshing || !token}>
-        {refreshing ? "Refreshing…" : "Refresh status"}
-      </button>
+    <section className="provider-panel" ref={pageRef}>
+      <div className={`provider-pull${pull.open ? " is-open" : ""}`}>{pull.open ? pull.label : ""}</div>
       <div className="provider-subtabs" role="tablist">
         {(
           [
