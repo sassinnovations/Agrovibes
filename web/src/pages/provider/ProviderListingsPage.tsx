@@ -1,20 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { fetchProviderKycStatus, fetchProviderListings, type ProviderListing } from "../../api/providerKyc";
 import { listingImage } from "./listingImages";
 import { listingStatusText } from "./providerStatus";
+import { usePullToRefresh } from "./usePullToRefresh";
 
 export function ProviderListingsPage() {
   const { token } = useAuth();
   const [rows, setRows] = useState<ProviderListing[]>([]);
   const [status, setStatus] = useState("not_submitted");
   const [error, setError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
+  const pageRef = useRef<HTMLElement>(null);
 
   const load = async () => {
     if (!token) return;
-    setRefreshing(true);
     try {
       const [kyc, listed] = await Promise.all([fetchProviderKycStatus(token), fetchProviderListings(token)]);
       setStatus(kyc.status);
@@ -22,10 +22,10 @@ export function ProviderListingsPage() {
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load listings.");
-    } finally {
-      setRefreshing(false);
     }
   };
+
+  const pull = usePullToRefresh(pageRef, load);
 
   useEffect(() => {
     void load();
@@ -33,10 +33,8 @@ export function ProviderListingsPage() {
   }, [token]);
 
   return (
-    <section className="provider-panel">
-      <button type="button" className="provider-btn" onClick={() => void load()} disabled={refreshing || !token}>
-        {refreshing ? "Refreshing…" : "Refresh status"}
-      </button>
+    <section className="provider-panel" ref={pageRef}>
+      <div className={`provider-pull${pull.open ? " is-open" : ""}`}>{pull.open ? pull.label : ""}</div>
       <h1>Your listings</h1>
       <p>Create a rental, service, store, or educator listing.</p>
       {status !== "approved" ? (
