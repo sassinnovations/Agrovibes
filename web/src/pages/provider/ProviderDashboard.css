@@ -30,6 +30,12 @@
   text-align: center;
 }
 
+button.provider-flow__card {
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+}
+
 .provider-flow__card strong {
   display: block;
   font-size: 16px;
