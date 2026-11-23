@@ -43,6 +43,7 @@ export function ProviderOverviewPage() {
   const [confirmAccount, setConfirmAccount] = useState("");
   const [ifsc, setIfsc] = useState("");
   const [pin, setPin] = useState("");
+  const [bankOpen, setBankOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -184,17 +185,29 @@ export function ProviderOverviewPage() {
     }
   ];
 
+  const canAddBank = approved && !payoutReady;
+
   return (
     <section className="provider-flow">
-      {steps.map((step, index) => (
-        <div key={step.title}>
-          <article className={`provider-flow__card${step.done ? " is-done" : ""}`}>
-            <strong>{step.done ? "✓ " : ""}{step.title}</strong>
-            <span>{step.detail}</span>
-          </article>
-          {index < steps.length - 1 ? <div className="provider-flow__arrow" aria-hidden>↓</div> : null}
-        </div>
-      ))}
+      {steps.map((step, index) => {
+        const openBank = canAddBank && step.title.startsWith("Add Bank Account");
+        return (
+          <div key={step.title}>
+            {openBank ? (
+              <button type="button" className="provider-flow__card" onClick={() => setBankOpen(true)}>
+                <strong>{step.title}</strong>
+                <span>{step.detail}</span>
+              </button>
+            ) : (
+              <article className={`provider-flow__card${step.done ? " is-done" : ""}`}>
+                <strong>{step.done ? "✓ " : ""}{step.title}</strong>
+                <span>{step.detail}</span>
+              </article>
+            )}
+            {index < steps.length - 1 ? <div className="provider-flow__arrow" aria-hidden>↓</div> : null}
+          </div>
+        );
+      })}
 
       {!approved ? (
         <Link className="provider-flow__link" to={status === "pending" ? "/" : "/provider/join"}>
@@ -202,7 +215,7 @@ export function ProviderOverviewPage() {
         </Link>
       ) : null}
 
-      {approved && !payoutReady ? (
+      {canAddBank && bankOpen ? (
         <form
           className="provider-bank"
           onSubmit={(event) => {
