@@ -9,13 +9,14 @@ import { useAuth } from "../../auth/AuthContext";
 import { LocationMapPicker } from "../../components/LocationMapPicker";
 import type { RootStackParamList } from "../../navigation/rootStackTypes";
 import { useAndroidNestedStackBack } from "../../navigation/useAndroidScreenBack";
-import { createRazorpayOrder, verifyRazorpayPayment } from "../../services/api";
+import { createRazorpayOrder, fetchRentalListings, verifyRazorpayPayment } from "../../services/api";
 import { addCustomerBooking } from "../../services/providerWorkflow";
 import { APP_BLACK, APP_LIME, APP_SURFACE, APP_TEXT, APP_TEXT_MUTED, APP_TEXT_ON_LIME } from "../../theme/appColors";
 import { saveCustomerRentalBooking, uploadCustomerBookings } from "./customerRentalBookings";
 import { BookingDateField } from "./BookingDateField";
-import { catalogItemById } from "./rentalCatalog";
-import { clearRentalCart, getRentalCart, updateRentalCartQuantity, type RentalCartLine } from "./rentalCart";
+import { portalCategoryForListing } from "./rentalCategories";
+import { catalogItemById, RENTAL_CATALOG_SUBS } from "./rentalCatalog";
+import { clearRentalCart, getRentalCart, rememberRentalCartImages, updateRentalCartQuantity, type RentalCartLine } from "./rentalCart";
 
 type PayMethod = "card" | "upi" | "netbanking";
 
@@ -113,13 +114,24 @@ export function RentalCartScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      void getRentalCart().then((next) => {
-        if (active) setLines(next);
-      });
+      void (async () => {
+        const next = await getRentalCart();
+        if (!active) return;
+        setLines(next);
+        const data = await fetchRentalListings(token).catch(() => null);
+        if (!active || !data) return;
+        const images: Record<string, string> = {};
+        for (const row of data.listings || []) {
+          const url = String(row.imageUrl || "").trim();
+          if (url) images[String(row.id)] = url;
+        }
+        const filled = await rememberRentalCartImages(images);
+        if (active) setLines(filled);
+      })();
       return () => {
         active = false;
       };
-    }, [])
+    }, [token])
   );
 
   const itemTotal = lines.reduce((sum, line) => sum + line.mrp * line.quantity, 0);
@@ -315,10 +327,14 @@ export function RentalCartScreen() {
         <Text style={styles.paneTitle}>Your items</Text>
         {lines.length === 0 ? <Text style={styles.empty}>Your cart is empty. Add a rental, then open the cart again.</Text> : null}
         {lines.map((line) => {
-          const cover = catalogItemById(line.listingId);
+          const uploaded = String(line.imageUrl || "").trim();
+          const catalog = catalogItemById(line.listingId);
+          const categoryId = portalCategoryForListing(line.category, line.title);
+          const fallback = RENTAL_CATALOG_SUBS[categoryId]?.[0]?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image;
+          const photo = uploaded ? { uri: uploaded } : catalog?.image ?? fallback;
           return (
             <View key={lineKey(line)} style={styles.item}>
-              {cover ? <Image source={cover.image} style={styles.photo} resizeMode="cover" /> : <View style={styles.photo} />}
+              <Image source={photo} style={styles.photo} resizeMode="cover" />
               <View style={styles.itemBody}>
                 <Text style={styles.itemTitle} numberOfLines={2}>
                   {line.title}

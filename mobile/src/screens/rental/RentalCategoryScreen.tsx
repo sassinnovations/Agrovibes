@@ -20,6 +20,15 @@ const SIDE_CARD_H = 88;
 const SIDEBAR_W = 16 + SIDE_CARD_W + 10;
 const TILE_BG = "#303132";
 
+function listingImageUrl(item: RentalCatalogItem) {
+  const source = item.image;
+  if (source && typeof source === "object" && "uri" in source && typeof source.uri === "string") {
+    const uri = source.uri.trim();
+    return uri || undefined;
+  }
+  return undefined;
+}
+
 function rememberCartItem(item: RentalCatalogItem, categoryTitle: string) {
   return addRentalCartLine({
     listingId: item.id,
@@ -29,7 +38,8 @@ function rememberCartItem(item: RentalCatalogItem, categoryTitle: string) {
     quantity: 1,
     unitPrice: item.price,
     unitLabel: item.unitLabel,
-    mrp: item.mrp
+    mrp: item.mrp,
+    imageUrl: listingImageUrl(item)
   });
 }
 
@@ -155,7 +165,8 @@ export function RentalCategoryScreen() {
       quantity: count,
       unitPrice: item.price,
       unitLabel: item.unitLabel,
-      mrp: item.mrp
+      mrp: item.mrp,
+      imageUrl: listingImageUrl(item)
     }).then(() => {
       setSelected(null);
       navigateToRentalCart(location);
