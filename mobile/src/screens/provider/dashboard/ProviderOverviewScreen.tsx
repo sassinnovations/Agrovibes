@@ -5,6 +5,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { ProviderChromeHeader } from "./ProviderChrome";
 import { useAuth } from "../../../auth/AuthContext";
+import { APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../../../theme/appColors";
 import {
   getProviderListings,
   getProviderRegistrationDraft,

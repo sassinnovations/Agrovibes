@@ -1,10 +1,10 @@
 import React from "react";
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ImageSourcePropType } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { APP_BLACK, APP_LIME } from "../theme/appColors";
 
-const BAR_BG = "#262626";
 const ICON_SIZE = 22;
 
 const TAB_ICONS = {
@@ -23,27 +23,12 @@ const TAB_META: Record<string, { label: string; icon: ImageSourcePropType }> = {
   Profile: { label: "Profile", icon: TAB_ICONS.Profile }
 };
 
-export function providerSidebarWidth(windowWidth: number) {
-  return windowWidth >= 760 ? 220 : 84;
-}
-
 export function ProviderTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const wide = width >= 760;
-  const sidebarWidth = providerSidebarWidth(width);
+  const bottomPad = Platform.OS === "web" ? 8 : Math.max(insets.bottom, 8);
 
   return (
-    <View
-      style={[
-        styles.sidebar,
-        {
-          width: sidebarWidth,
-          paddingTop: Math.max(insets.top, 16),
-          paddingBottom: Math.max(insets.bottom, 16)
-        }
-      ]}
-    >
+    <View style={[styles.bar, { paddingBottom: bottomPad }]}>
       {state.routes.map((route, index) => {
         const focused = state.index === index;
         const meta = TAB_META[route.name] ?? { label: route.name, icon: TAB_ICONS.Overview };
@@ -62,16 +47,12 @@ export function ProviderTabBar({ state, descriptors, navigation }: BottomTabBarP
           <Pressable
             key={route.key}
             onPress={onPress}
-            style={[styles.item, wide ? styles.itemWide : null, focused ? styles.itemActive : null]}
+            style={[styles.item, focused ? styles.itemActive : null]}
             accessibilityRole="button"
             accessibilityState={{ selected: focused }}
             accessibilityLabel={descriptors[route.key]?.options.tabBarAccessibilityLabel ?? meta.label}
           >
-            <Image
-              source={meta.icon}
-              style={[styles.icon, focused ? styles.iconActive : null]}
-              resizeMode="contain"
-            />
+            <Image source={meta.icon} style={[styles.icon, focused ? styles.iconActive : null]} resizeMode="contain" />
             <Text style={[styles.label, focused ? styles.labelActive : null]} numberOfLines={1}>
               {meta.label}
             </Text>
@@ -83,35 +64,27 @@ export function ProviderTabBar({ state, descriptors, navigation }: BottomTabBarP
 }
 
 const styles = StyleSheet.create({
-  sidebar: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    zIndex: 20,
-    backgroundColor: BAR_BG,
-    borderRightWidth: 1,
-    borderRightColor: "rgba(255,255,255,0.08)",
-    paddingHorizontal: 10,
-    gap: 6
+  bar: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    backgroundColor: APP_BLACK,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(255,255,255,0.08)",
+    paddingTop: 6
   },
   item: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    minHeight: 56,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 6
-  },
-  itemWide: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    gap: 12,
-    paddingHorizontal: 12
+    gap: 3,
+    minHeight: 52,
+    paddingVertical: 4
   },
   itemActive: {
-    backgroundColor: "rgba(201, 255, 53, 0.12)"
+    borderTopWidth: 2,
+    borderTopColor: APP_LIME,
+    marginTop: -6,
+    paddingTop: 8
   },
   icon: {
     width: ICON_SIZE,
@@ -119,7 +92,7 @@ const styles = StyleSheet.create({
     tintColor: "#FFFFFF"
   },
   iconActive: {
-    tintColor: "#c9ff35"
+    tintColor: APP_LIME
   },
   label: {
     color: "#FFFFFF",
@@ -127,6 +100,6 @@ const styles = StyleSheet.create({
     fontWeight: "600"
   },
   labelActive: {
-    color: "#c9ff35"
+    color: APP_LIME
   }
 });
