@@ -383,6 +383,8 @@ export const AppVideo = React.forwardRef<AppVideoHandle, AppVideoProps>(function
       nativeControls={nativeControls}
       playsInline
       onFirstFrameRender={markFirstFrame}
+      // Android SurfaceView ignores parent clipping and paints into the next reel.
+      {...(Platform.OS === "android" ? { surfaceType: "textureView" as const } : {})}
     />
   );
 });

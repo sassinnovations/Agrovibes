@@ -4324,6 +4324,8 @@ export function HomeScreen({ refreshToken = 0, onOpenCreate, takePendingFeedPost
 
         </ScrollView>
 
+        <HomeProviderBanners />
+
         <View style={[styles.homeTopTabsBarDark, isCompactHomeChrome ? styles.homeTopTabsBarCompact : null]}>
           <View style={[styles.homeTopTabsRowDark, isCompactHomeChrome ? styles.homeTopTabsRowCompact : null]}>
             {visibleHomeTopTabs.map((tab) => {
@@ -4355,7 +4357,6 @@ export function HomeScreen({ refreshToken = 0, onOpenCreate, takePendingFeedPost
           </View>
           <View style={styles.homeTopTabsSeparator} />
         </View>
-        <HomeProviderBanners />
       </View>
       </DeactivatedChromeWrap>
     ),
