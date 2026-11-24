@@ -36,29 +36,6 @@ const SIDE_CARD_H = 88;
 const SIDEBAR_W = 16 + SIDE_CARD_W + 10;
 const TILE_BG = "#303132";
 
-function listingImageUrl(item: RentalCatalogItem) {
-  const source = item.image;
-  if (source && typeof source === "object" && "uri" in source && typeof source.uri === "string") {
-    const uri = source.uri.trim();
-    return uri || undefined;
-  }
-  return undefined;
-}
-
-function rememberCartItem(item: RentalCatalogItem, categoryTitle: string) {
-  return addRentalCartLine({
-    listingId: item.id,
-    title: item.title,
-    category: categoryTitle,
-    option: item.options[0] || item.unitLabel,
-    quantity: 1,
-    unitPrice: item.price,
-    unitLabel: item.unitLabel,
-    mrp: item.mrp,
-    imageUrl: listingImageUrl(item)
-  });
-}
-
 function rupee(n: number) {
   return "\u20B9" + Math.round(n).toLocaleString("en-IN");
 }
@@ -172,22 +149,12 @@ export function RentalCategoryScreen() {
     setOption(chosenOption || item.options[0] || item.unitLabel);
   };
 
-  const bookSelected = () => {
-    if (!selected) return;
-    const item = selected;
-    const chosen = option || item.options[0] || item.unitLabel;
-    const count = Math.max(quantity, 1);
-    void setRentalCartLine({
-      listingId: item.id,
-      title: item.title,
-      category: category?.title || item.title,
-      option: chosen,
-      quantity: count,
-      unitPrice: item.price,
-      unitLabel: item.unitLabel,
-      mrp: item.mrp,
-      imageUrl: listingImageUrl(item)
-    }).then(() => {
+  const goToCart = () => {
+    if (selected) {
+      const chosen = option || selected.options[0] || selected.unitLabel;
+      if (getQuantity(selected.id, chosen) <= 0) {
+        addItem(selected, category?.title || selected.title, chosen);
+      }
       setSelected(null);
     }
     navigateToRentalCart(location);

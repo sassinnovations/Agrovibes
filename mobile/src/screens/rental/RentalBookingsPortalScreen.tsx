@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import React, { useCallback, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import type { ImageSourcePropType } from "react-native";
-import { AppTopBar } from "../../components/AppTopBar";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useCallback, useMemo, useState } from "react";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { RentalText as Text, RentalTextInput as TextInput, rentalType } from "./rentalTypography";
 import { LocationMapPicker } from "../../components/LocationMapPicker";
 import { navigateToRentalCart, navigateToRentalCategory } from "../../navigation/navigationRef";
 import { useAndroidTabBackToHome } from "../../navigation/useAndroidScreenBack";
@@ -71,16 +71,15 @@ export function RentalBookingsPortalScreen() {
   const [mapMode, setMapMode] = useState<"current" | "manual" | null>(null);
   const { itemCount: cartCount, refreshFromServer } = useRentalCart();
   const [query, setQuery] = useState("");
-<<<<<<< HEAD
-  const pageWidth = Math.min(width, 430);
-  const tileWidth = Math.floor((pageWidth - 32 - 12) / 2);
-=======
   const tileWidth = Math.floor((Math.min(width, 520) - 32 - 12) / 2);
   const bannerWidth = Math.min(width, 520) - 56;
->>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 
   useFocusEffect(
     useCallback(() => {
+      let active = true;
+      let active = true;
+      let active = true;
+      let active = true;
       void uploadCustomerBookings(token).catch(() => undefined);
       void refreshFromServer();
       void refreshLocation().catch(() => undefined);
@@ -267,12 +266,8 @@ const styles = StyleSheet.create({
     ...rentalType(11, "700")
   },
   locationRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-<<<<<<< HEAD
-  locationValue: { color: APP_TEXT, flex: 1, minWidth: 0, flexShrink: 1, ...rentalType(16, "800") },
-=======
   locationValue: { color: APP_TEXT, fontSize: 16, fontWeight: "800", maxWidth: 260 },
   bannerRow: { gap: 10, paddingBottom: 20 },
->>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
   hero: {
     minHeight: 168,
     borderRadius: 18,

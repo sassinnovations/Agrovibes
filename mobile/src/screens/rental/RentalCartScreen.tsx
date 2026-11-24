@@ -10,14 +10,15 @@ import { useAuth } from "../../auth/AuthContext";
 import { LocationMapPicker } from "../../components/LocationMapPicker";
 import type { RootStackParamList } from "../../navigation/rootStackTypes";
 import { useAndroidNestedStackBack } from "../../navigation/useAndroidScreenBack";
-import { createRazorpayOrder, fetchRentalListings, verifyRazorpayPayment } from "../../services/api";
+import { createRazorpayOrder, verifyRazorpayPayment } from "../../services/api";
 import { addCustomerBooking } from "../../services/providerWorkflow";
 import { APP_BLACK, APP_LIME, APP_SURFACE, APP_TEXT, APP_TEXT_MUTED, APP_TEXT_ON_LIME } from "../../theme/appColors";
 import { saveCustomerRentalBooking, uploadCustomerBookings } from "./customerRentalBookings";
 import { BookingDateField } from "./BookingDateField";
-import { portalCategoryForListing } from "./rentalCategories";
-import { catalogItemById, RENTAL_CATALOG_SUBS } from "./rentalCatalog";
-import { clearRentalCart, getRentalCart, rememberRentalCartImages, updateRentalCartQuantity, type RentalCartLine } from "./rentalCart";
+import { catalogItemById } from "./rentalCatalog";
+import { useUserLocation } from "../../location/UserLocationContext";
+import { useRentalCart } from "./RentalCartContext";
+import { RENTAL_CART_MAX_QTY, rentalLineKey, type RentalCartLine } from "./rentalCart";
 
 type PayMethod = "card" | "upi" | "netbanking";
 
@@ -116,26 +117,17 @@ export function RentalCartScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      void (async () => {
-        const next = await getRentalCart();
-        if (!active) return;
-        setLines(next);
-        const data = await fetchRentalListings(token).catch(() => null);
-        if (!active || !data) return;
-        const images: Record<string, string> = {};
-        for (const row of data.listings || []) {
-          const url = String(row.imageUrl || "").trim();
-          if (url) images[String(row.id)] = url;
-        }
-        const filled = await rememberRentalCartImages(images);
-        if (active) setLines(filled);
-      })();
-      return () => {
-        active = false;
-      };
-    }, [token])
+      void refreshFromServer();
+    }, [refreshFromServer])
   );
+
+  useEffect(() => {
+    if ((!place || place === "Add location") && savedLabel && savedLabel !== "Add location") {
+      setPlace(savedLabel);
+      setPlaceLat(savedLat);
+      setPlaceLng(savedLng);
+    }
+  }, [place, savedLabel, savedLat, savedLng]);
 
   const itemTotal = lines.reduce((sum, line) => sum + line.mrp * line.quantity, 0);
   const toPay = lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0);
@@ -329,14 +321,10 @@ export function RentalCartScreen() {
         <Text style={styles.paneTitle}>Your items</Text>
         {lines.length === 0 ? <Text style={styles.empty}>Your cart is empty. Add a rental, then open the cart again.</Text> : null}
         {lines.map((line) => {
-          const uploaded = String(line.imageUrl || "").trim();
-          const catalog = catalogItemById(line.listingId);
-          const categoryId = portalCategoryForListing(line.category, line.title);
-          const fallback = RENTAL_CATALOG_SUBS[categoryId]?.[0]?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image;
-          const photo = uploaded ? { uri: uploaded } : catalog?.image ?? fallback;
+          const cover = catalogItemById(line.listingId);
           return (
             <View key={lineKey(line)} style={styles.item}>
-              <Image source={photo} style={styles.photo} resizeMode="cover" />
+              {cover ? <Image source={cover.image} style={styles.photo} resizeMode="cover" /> : <View style={styles.photo} />}
               <View style={styles.itemBody}>
                 <Text style={styles.itemTitle} numberOfLines={2}>
                   {line.title}
