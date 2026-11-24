@@ -32,7 +32,7 @@ export type RootStackParamList = {
   ExpertVerification: undefined;
   SecurityVerification: undefined;
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
-  ProviderMain: undefined;
+  ProviderMain: { screen?: "Overview" | "Rental" | "Listing" | "Services" | "Profile" } | undefined;
   ProviderNewListing: undefined;
   InstructorStudio: undefined;
   EditProfile: undefined;

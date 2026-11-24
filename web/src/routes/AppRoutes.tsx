@@ -27,6 +27,8 @@ import { TermsOfUse } from "../pages/TermsOfUse";
 import { AdminReportsPage } from "../pages/AdminReportsPage";
 import { JoinProviderPage } from "../pages/provider/JoinProviderPage";
 import { ProviderDashboard } from "../pages/provider/ProviderDashboard";
+import { ProviderBankPage } from "../pages/provider/ProviderBankPage";
+import { RequireProviderBank } from "../pages/provider/RequireProviderBank";
 import { ProviderOverviewPage } from "../pages/provider/ProviderOverviewPage";
 import { ProviderRentalPage } from "../pages/provider/ProviderRentalPage";
 import { ProviderListingsPage } from "../pages/provider/ProviderListingsPage";
@@ -102,9 +104,12 @@ export function AppRoutes() {
         <Route path="provider/join" element={<JoinProviderPage />} />
         <Route path="provider" element={<ProviderDashboard />}>
           <Route index element={<ProviderOverviewPage />} />
+          <Route path="bank" element={<ProviderBankPage />} />
           <Route path="rental" element={<ProviderRentalPage />} />
-          <Route path="listings" element={<ProviderListingsPage />} />
-          <Route path="listings/new" element={<ProviderNewListingPage />} />
+          <Route element={<RequireProviderBank />}>
+            <Route path="listings" element={<ProviderListingsPage />} />
+            <Route path="listings/new" element={<ProviderNewListingPage />} />
+          </Route>
           <Route path="services" element={<ProviderServicesPage />} />
           <Route path="profile" element={<ProviderProfilePage />} />
         </Route>

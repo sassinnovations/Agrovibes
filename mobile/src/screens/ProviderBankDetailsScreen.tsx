@@ -49,6 +49,14 @@ export function ProviderBankDetailsScreen() {
   const ifscTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const payouts = route.params?.purpose === "payouts";
+
+  const leaveBank = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate("ProviderMain", { screen: "Overview" });
+  }, [navigation]);
   const accountDigits = accountNumber.replace(/\D/g, "");
   const confirmDigits = confirmAccount.replace(/\D/g, "");
   const ifscCode = ifsc.trim().toUpperCase();
@@ -196,7 +204,7 @@ export function ProviderBankDetailsScreen() {
 
   return (
     <SafeAreaView style={pf.screen} edges={["top", "bottom"]}>
-      <ProviderFormHeader onBack={() => navigation.goBack()} />
+      <ProviderFormHeader onBack={leaveBank} />
       {payouts ? (
         <Text style={[pf.sectionTitle, { paddingHorizontal: 16, paddingTop: 8 }]}>Add Bank Account</Text>
       ) : (
