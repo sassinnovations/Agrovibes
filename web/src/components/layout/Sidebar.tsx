@@ -7,9 +7,10 @@ import "./Sidebar.css";
 
 const NAV = [
   { to: "/", label: "Home", icon: "home" },
+  { to: "/rentals", label: "Rentals", icon: "rentals" },
   { to: "/search", label: "Search", icon: "search" },
   { to: "/drops", label: "Drops", icon: "drops" },
-  { to: "/messages", label: "Messages", icon: "messages" },
+  { to: "/messages", label: "Chat", icon: "messages" },
   { to: "/weather", label: "Weather", icon: "weather" },
   { to: "/schemes", label: "Schemes", icon: "schemes" },
   { to: "/notifications", label: "Notifications", icon: "notifications" },
@@ -24,6 +25,13 @@ function NavIcon({ name }: { name: NavIconName }) {
       return (
         <svg viewBox="0 0 24 24" aria-hidden>
           <path d="m3.2 10.8 8.1-6.4a1.2 1.2 0 0 1 1.5 0l8.1 6.4M5.5 9.7V20a1 1 0 0 0 1 1h4.7v-5.2a1 1 0 0 1 1-1h0.6a1 1 0 0 1 1 1V21h4.7a1 1 0 0 0 1-1V9.7" />
+        </svg>
+      );
+    case "rentals":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden>
+          <path d="M4 16.5h16M6.5 16.5v-4h11v4M8 12.5 10 8h4l2 4.5" />
+          <path d="M7.5 16.5a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Zm9 0a1.8 1.8 0 1 0 0 3.6 1.8 1.8 0 0 0 0-3.6Z" />
         </svg>
       );
     case "search":
@@ -78,7 +86,7 @@ function NavIcon({ name }: { name: NavIconName }) {
 
 const PROVIDER_NAV = [
   { to: "/provider", label: "Overview", end: true, icon: "overview" },
-  { to: "/provider/rental", label: "Rentals", end: false, icon: "rentals" },
+  { to: "/provider/rental", label: "Rental", end: false, icon: "rentals" },
   { to: "/provider/listings/new", label: "Create", end: true, icon: "create" },
   { to: "/provider/listings", label: "Listing", end: true, icon: "listing" },
   { to: "/provider/services", label: "Services", end: false, icon: "services" },
@@ -134,7 +142,7 @@ function ProviderSidebar() {
   const { signOut } = useAuth();
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar sidebar--open">
       <div className="sidebar__inner">
         <NavLink to="/" className="sidebar__logo" title="Cropvibe feed">
           <img src="/cropvibefavicon.png" alt="" className="sidebar__logo-icon" />

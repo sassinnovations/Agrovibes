@@ -79,6 +79,7 @@ import { ReelStoryComposerModal } from "../components/ReelStoryComposerModal";
 import { ForwardMessageModal } from "./messaging/ForwardMessageModal";
 import { buildStoryForwardDmBody } from "./messaging/dmMessageFormats";
 import { DeactivatedContentPlaceholder, DeactivatedChromeWrap, useIsAccountDeactivated } from "../components/DeactivatedAccountGate";
+import { HomeProviderBanners } from "../components/home/HomeProviderBanners";
 import { useAuth } from "../auth/AuthContext";
 import {
   createHomeStory,
@@ -4354,6 +4355,7 @@ export function HomeScreen({ refreshToken = 0, onOpenCreate, takePendingFeedPost
           </View>
           <View style={styles.homeTopTabsSeparator} />
         </View>
+        <HomeProviderBanners />
       </View>
       </DeactivatedChromeWrap>
     ),

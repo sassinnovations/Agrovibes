@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useMemo, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
-import { RentalText as Text, RentalTextInput as TextInput, rentalType } from "./rentalTypography";
+import React, { useCallback, useState } from "react";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import type { ImageSourcePropType } from "react-native";
+import { AppTopBar } from "../../components/AppTopBar";
 import { LocationMapPicker } from "../../components/LocationMapPicker";
 import { navigateToRentalCart, navigateToRentalCategory } from "../../navigation/navigationRef";
 import { useAndroidTabBackToHome } from "../../navigation/useAndroidScreenBack";
@@ -16,9 +16,50 @@ import { RENTAL_CATALOG_SUBS } from "./rentalCatalog";
 import { useUserLocation } from "../../location/UserLocationContext";
 import { useRentalCart } from "./RentalCartContext";
 
-const FEATURED = ["machinery", "drone", "labour", "soil"];
+const FEATURED = ["machinery", "land", "drone", "labour", "soil"];
 const LOGO = require("../../../assets/crop vibe.png");
-const HERO_ART = RENTAL_CATALOG_SUBS.machinery[0].image;
+const BANNERS = [
+  {
+    id: "machinery",
+    kicker: "Rental bookings",
+    title: "Ready for your next big job?",
+    subtitle: "Find the right machinery for your farm.",
+    action: "Explore rentals",
+    image: RENTAL_CATALOG_SUBS.machinery[0].image
+  },
+  {
+    id: "drone",
+    kicker: "Drone services",
+    title: "Spray the field from above",
+    subtitle: "Book a pilot for crop spraying.",
+    action: "Book a drone",
+    image: RENTAL_CATALOG_SUBS.drone[0].image
+  },
+  {
+    id: "labour",
+    kicker: "Farm labour",
+    title: "A crew for the busy days",
+    subtitle: "Sowing, weeding, and harvest help.",
+    action: "Hire a crew",
+    image: RENTAL_CATALOG_SUBS.labour[0].image
+  },
+  {
+    id: "soil",
+    kicker: "Soil and crop care",
+    title: "Know what the soil needs",
+    subtitle: "Sample pickup and a nutrient report.",
+    action: "Book a test",
+    image: RENTAL_CATALOG_SUBS.soil[0].image
+  },
+  {
+    id: "drivers",
+    kicker: "Operators",
+    title: "A driver for the machine",
+    subtitle: "Licensed operators for the shift.",
+    action: "Hire an operator",
+    image: RENTAL_CATALOG_SUBS.drivers[0].image
+  }
+];
 
 export function RentalBookingsPortalScreen() {
   useAndroidTabBackToHome();
@@ -30,8 +71,13 @@ export function RentalBookingsPortalScreen() {
   const [mapMode, setMapMode] = useState<"current" | "manual" | null>(null);
   const { itemCount: cartCount, refreshFromServer } = useRentalCart();
   const [query, setQuery] = useState("");
+<<<<<<< HEAD
   const pageWidth = Math.min(width, 430);
   const tileWidth = Math.floor((pageWidth - 32 - 12) / 2);
+=======
+  const tileWidth = Math.floor((Math.min(width, 520) - 32 - 12) / 2);
+  const bannerWidth = Math.min(width, 520) - 56;
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 
   useFocusEffect(
     useCallback(() => {
@@ -86,18 +132,26 @@ export function RentalBookingsPortalScreen() {
           </View>
         </Pressable>
 
-        <View style={styles.hero}>
-          <View style={styles.heroCopy}>
-            <Text style={styles.heroKicker}>Rental bookings</Text>
-            <Text style={styles.heroTitle}>Ready for your next big job?</Text>
-            <Text style={styles.heroSub}>Find the right machinery for your farm.</Text>
-            <Pressable style={styles.heroBtn} onPress={() => navigateToRentalCategory("machinery", location)}>
-              <Text style={styles.heroBtnText}>Explore rentals</Text>
-              <Ionicons name="arrow-forward" size={14} color="#f4fff4" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bannerRow}>
+          {BANNERS.map((banner) => (
+            <Pressable
+              key={banner.id}
+              style={[styles.hero, { width: bannerWidth }]}
+              onPress={() => navigateToRentalCategory(banner.id, location)}
+            >
+              <View style={styles.heroCopy}>
+                <Text style={styles.heroKicker}>{banner.kicker}</Text>
+                <Text style={styles.heroTitle}>{banner.title}</Text>
+                <Text style={styles.heroSub}>{banner.subtitle}</Text>
+                <View style={styles.heroBtn}>
+                  <Text style={styles.heroBtnText}>{banner.action}</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#f4fff4" />
+                </View>
+              </View>
+              <Image source={banner.image} style={styles.heroArt} resizeMode="contain" />
             </Pressable>
-          </View>
-          <Image source={HERO_ART} style={styles.heroArt} resizeMode="contain" />
-        </View>
+          ))}
+        </ScrollView>
 
         <Text style={styles.ask}>What do you need today?</Text>
         <View style={styles.search}>
@@ -213,7 +267,12 @@ const styles = StyleSheet.create({
     ...rentalType(11, "700")
   },
   locationRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+<<<<<<< HEAD
   locationValue: { color: APP_TEXT, flex: 1, minWidth: 0, flexShrink: 1, ...rentalType(16, "800") },
+=======
+  locationValue: { color: APP_TEXT, fontSize: 16, fontWeight: "800", maxWidth: 260 },
+  bannerRow: { gap: 10, paddingBottom: 20 },
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
   hero: {
     minHeight: 168,
     borderRadius: 18,
@@ -221,7 +280,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 0,
     paddingLeft: 16
   },
   heroCopy: { flex: 1, paddingVertical: 16, zIndex: 1 },

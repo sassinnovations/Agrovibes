@@ -328,6 +328,76 @@ export async function authLogin(payload: {
   return (await parseJsonOrThrow(response)) as AuthResponse;
 }
 
+export async function fetchLocationStates() {
+  const response = await fetch(`${API_BASE_URL}/v1/locations/states`);
+  return (await parseJsonOrThrow(response)) as { states: { code: string; name: string }[] };
+}
+
+export async function fetchLocationDistricts(state: string) {
+  const response = await fetch(`${API_BASE_URL}/v1/locations/districts?state=${encodeURIComponent(state)}`);
+  return (await parseJsonOrThrow(response)) as { districts: string[] };
+}
+
+export async function fetchLocationCities(state: string, district: string) {
+  const params = new URLSearchParams({ state, district });
+  const response = await fetch(`${API_BASE_URL}/v1/locations/cities?${params.toString()}`);
+  return (await parseJsonOrThrow(response)) as { cities: string[] };
+}
+
+export async function fetchLocationPin(state: string, district: string, city: string) {
+  const params = new URLSearchParams({ state, district, city });
+  const response = await fetch(`${API_BASE_URL}/v1/locations/pincode?${params.toString()}`);
+  return (await parseJsonOrThrow(response)) as { pinCode: string };
+}
+
+export async function fetchProviderMsg91Widget(token: string) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/phone/widget`, token)) as {
+    widgetId: string;
+    tokenAuth: string;
+  };
+}
+
+export async function sendProviderPhoneOtp(token: string, payload: { phone: string }) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/auth/phone/send-otp`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, purpose: "provider" })
+  })) as { success: boolean; phone: string; provider?: string; channel?: string };
+}
+
+export async function confirmProviderPhone(
+  token: string,
+  payload: { phone: string; code?: string; accessToken?: string }
+) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/phone/confirm`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })) as { verified: boolean };
+}
+
+export async function createProviderRazorpayAccount(
+  token: string,
+  payload: {
+    accountNumber: string;
+    ifsc: string;
+    holderName: string;
+    email?: string;
+    phone?: string;
+    businessName?: string;
+    street?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+  }
+) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/payouts/razorpay`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })) as { linked: boolean; accountId?: string; message?: string };
+}
+
 export async function sendPhoneOtp(payload: { phone: string }) {
   warmUpServer();
   const response = await fetchAuthWithRetry(`${API_BASE_URL}/v1/auth/phone/send-otp`, {
@@ -1010,6 +1080,9 @@ export async function fetchRentalListings(token?: string | null) {
       category: string;
       channel: string;
       status: string;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
       createdAt: string;
       providerName: string;
     }>;
@@ -1024,6 +1097,10 @@ export async function fetchProviderListings(token: string) {
       category: string;
       channel: string;
       status: string;
+      rcNumber?: string | null;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
       createdAt: string;
     }>;
   };
@@ -1040,15 +1117,47 @@ export async function submitRentalBooking(
   })) as { booking: { id: number } };
 }
 
+export async function updateProviderListing(
+  token: string,
+  listingId: string | number,
+  payload: { imageUrl?: string; dailyRate?: string | number; rateUnit?: string }
+) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings/${listingId}`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })) as { listing: { id: number; imageUrl?: string | null; dailyRate?: number | string | null; rateUnit?: string | null } };
+}
+
 export async function submitProviderListing(
   token: string,
-  payload: { title: string; category: string; channel: string }
+  payload: {
+    title: string;
+    category: string;
+    channel: string;
+    rcNumber?: string;
+    imageUrl?: string;
+    dailyRate?: string | number;
+    rateUnit?: string;
+  }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  })) as { listing: { id: number; title: string; category: string; channel: string; status: string; createdAt: string } };
+  })) as {
+    listing: {
+      id: number;
+      title: string;
+      category: string;
+      channel: string;
+      status: string;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
+      createdAt: string;
+    };
+  };
 }
 
 export async function submitProviderKyc(
@@ -2345,6 +2454,7 @@ export async function fetchSocialNotifications(token: string) {
     postComments?: SocialPostActivityNotification[];
     liveStarts?: SocialPostActivityNotification[];
     weatherAlerts?: SocialPostActivityNotification[];
+    providerUpdates?: SocialPostActivityNotification[];
     unreadCount: number;
   };
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
+import { useProviderJourney } from "../../components/provider/useProviderJourney";
 import {
   SettingsIconActivity,
   SettingsIconBack,
@@ -76,21 +77,10 @@ function SettingsSection({ title, children }: { title: string; children: React.R
   );
 }
 
-function PromoCard({ onClick }: { onClick?: () => void }) {
-  return (
-    <button type="button" className="settings-promo" onClick={onClick}>
-      <p className="settings-promo__title">
-        Rent It. Service It. <span>Earn</span>
-      </p>
-      <p className="settings-promo__subtitle">Machinery. Experts. Opportunity.</p>
-      <span className="settings-promo__cta">Join As Provider</span>
-    </button>
-  );
-}
-
 export function SettingsMenuPage() {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, token } = useAuth();
+  const journey = useProviderJourney(token);
 
   return (
     <div className="settings-page">
@@ -113,17 +103,17 @@ export function SettingsMenuPage() {
           />
         </SettingsSection>
 
-        <PromoCard onClick={() => navigate("/provider/join")} />
-
-        <SettingsSection title="Provider">
-          <SettingsRow
-            icon={<SettingsIconStore />}
-            title="Open provider dashboard"
-            subtitle="Overview, rental, listings, and services"
-            to="/provider"
-            showDivider={false}
-          />
-        </SettingsSection>
+        {journey.kind === "not_submitted" ? null : (
+          <SettingsSection title="Provider">
+            <SettingsRow
+              icon={<SettingsIconStore />}
+              title={journey.action}
+              subtitle={journey.rentalsDetail}
+              onClick={() => navigate(journey.to)}
+              showDivider={false}
+            />
+          </SettingsSection>
+        )}
 
         <SettingsSection title="How You Use Cropvibe">
           <SettingsRow icon={<SettingsIconBookmark />} title="Saved" to="/profile?tab=Saved" />

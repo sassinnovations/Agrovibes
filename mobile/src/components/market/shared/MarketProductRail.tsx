@@ -27,6 +27,7 @@ function formatReviews(count: string | number): string {
 function ProductRailCard({ product, onPress }: { product: ProductRailItem; onPress: () => void }) {
   const { addItem, getQuantity, setQuantity } = useCart();
   const [sizeIndex, setSizeIndex] = useState(0);
+<<<<<<< HEAD
   const sizes = product.sizes?.length ? product.sizes : ["500 ml"];
   const variant = sizes[sizeIndex] ?? sizes[0];
   const cartId = catalogCartId(product.id, variant);
@@ -38,6 +39,9 @@ function ProductRailCard({ product, onPress }: { product: ProductRailItem; onPre
     unitPrice: product.price,
     unitLabel: product.unitPrice || `/ ${variant}`
   };
+=======
+  const sizes = product.sizes ?? [];
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 
   return (
     <Pressable style={styles.card} onPress={onPress}>
@@ -54,11 +58,17 @@ function ProductRailCard({ product, onPress }: { product: ProductRailItem; onPre
       </View>
 
       <View style={styles.ratingRow}>
-        <Ionicons name="star" size={10} color={APP_LIME} />
-        <Text style={styles.ratingValue}>{product.rating?.toFixed(1) ?? "3.2"}</Text>
-        <Text style={styles.ratingMeta}>
-          {formatReviews(product.reviewCount ?? "24.6k")} {product.deliveryMinutes ?? "10 MIN"}
-        </Text>
+        {product.rating ? (
+          <>
+            <Ionicons name="star" size={10} color={APP_LIME} />
+            <Text style={styles.ratingValue}>{product.rating.toFixed(1)}</Text>
+            <Text style={styles.ratingMeta}>
+              {formatReviews(product.reviewCount ?? 0)} {product.deliveryMinutes ?? ""}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.ratingMeta}>Approved listing</Text>
+        )}
       </View>
 
       <Text style={styles.productTitle} numberOfLines={2}>
@@ -71,27 +81,35 @@ function ProductRailCard({ product, onPress }: { product: ProductRailItem; onPre
         </View>
       ) : null}
 
-      <View style={styles.sizeRow}>
-        {sizes.map((size, idx) => (
-          <Pressable
-            key={`${product.id}-${size}`}
-            hitSlop={4}
-            onPress={(e) => {
-              e.stopPropagation();
-              setSizeIndex(idx);
-            }}
-          >
-            <Text style={[styles.sizeChip, idx === sizeIndex ? styles.sizeChipActive : null]}>{size}</Text>
-          </Pressable>
-        ))}
-      </View>
+      {sizes.length > 0 ? (
+        <View style={styles.sizeRow}>
+          {sizes.map((size, idx) => (
+            <Pressable
+              key={`${product.id}-${size}`}
+              hitSlop={4}
+              onPress={(e) => {
+                e.stopPropagation();
+                setSizeIndex(idx);
+              }}
+            >
+              <Text style={[styles.sizeChip, idx === sizeIndex ? styles.sizeChipActive : null]}>{size}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
-      <Text style={styles.discountLabel}>{product.discountPct}% OFF</Text>
-      <View style={styles.priceRow}>
-        <Text style={styles.price}>₹{product.price.toLocaleString("en-IN")}</Text>
-        <Text style={styles.mrp}>₹{product.mrp.toLocaleString("en-IN")}</Text>
-      </View>
-      {product.unitPrice ? <Text style={styles.unitPrice}>{product.unitPrice}</Text> : null}
+      {product.price > 0 ? (
+        <>
+          {product.discountPct > 0 ? <Text style={styles.discountLabel}>{product.discountPct}% OFF</Text> : null}
+          <View style={styles.priceRow}>
+            <Text style={styles.price}>₹{product.price.toLocaleString("en-IN")}</Text>
+            {product.mrp > product.price ? <Text style={styles.mrp}>₹{product.mrp.toLocaleString("en-IN")}</Text> : null}
+          </View>
+          {product.unitPrice ? <Text style={styles.unitPrice}>{product.unitPrice}</Text> : null}
+        </>
+      ) : (
+        <Text style={styles.price}>Rate on request</Text>
+      )}
     </Pressable>
   );
 }

@@ -40,7 +40,10 @@ function profilePath(actorId: number, viewerId?: number | null) {
 }
 
 function postPath(entry: SocialPostActivityNotification) {
-  if (String(entry.type || "") === "weather_alert") return "/weather";
+  const type = String(entry.type || "");
+  if (type === "provider_kyc_approved") return "/provider";
+  if (type === "provider_kyc_rejected" || type === "provider_kyc_submitted") return type === "provider_kyc_submitted" ? "/" : "/provider/join";
+  if (type === "weather_alert") return "/weather";
   const postId = Number(entry.postId);
   if (!Number.isFinite(postId) || postId <= 0) return profilePath(entry.actorId);
   if (entry.postIsReel || String(entry.type || "").startsWith("live_")) return `/watch/${postId}`;

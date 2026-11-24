@@ -45,6 +45,10 @@ export const RENTAL_CATALOG_SUBS: Record<string, RentalCatalogSub[]> = {
     { id: "tools", label: "Tools", image: equipment },
     { id: "used", label: "Used", image: usedGear }
   ],
+  land: [
+    { id: "farmland", label: "Farmland", image: crop },
+    { id: "plots", label: "Plots", image: greenhouse }
+  ],
   drone: [
     { id: "spray", label: "Spray", image: drone },
     { id: "report", label: "Report", image: sprayReport }

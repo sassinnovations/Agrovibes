@@ -32,11 +32,11 @@ export function ProviderVerificationScreen() {
     });
   }, []);
 
-  const goToProviderDashboard = () => {
+  const goToCropvibeFeed = () => {
     navigation.dispatch(
       CommonActions.reset({
         index: 0,
-        routes: [{ name: "ProviderMain" }]
+        routes: [{ name: "Main", params: { screen: "Home" } }]
       })
     );
   };
@@ -47,13 +47,13 @@ export function ProviderVerificationScreen() {
     try {
       await submitProviderRegistrationForApproval(token);
       const message =
-        "Admin has been notified. Your KYC will appear in Admin → KYC Verification for approval.";
+        "Your application is with admin. We emailed the admin team. Stay on the CropVibe feed until you get an approval or rejection notification. After approval you can add listings.";
       if (Platform.OS === "web") {
         window.alert(`Submitted For Approval\n\n${message}`);
-        goToProviderDashboard();
+        goToCropvibeFeed();
       } else {
         Alert.alert("Submitted For Approval", message, [
-          { text: "OK", onPress: goToProviderDashboard }
+          { text: "OK", onPress: goToCropvibeFeed }
         ]);
       }
     } catch (error) {

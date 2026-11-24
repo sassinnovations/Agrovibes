@@ -1,20 +1,34 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+<<<<<<< HEAD
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { RentalText as Text, rentalType } from "./rentalTypography";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CartQtyControl } from "../../cart/CartQtyControl";
+=======
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../auth/AuthContext";
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 import type { RootStackParamList } from "../../navigation/rootStackTypes";
+import { fetchRentalListings } from "../../services/api";
 import { navigateToRentalCart, navigateToRentalCategory } from "../../navigation/navigationRef";
 import { useAndroidNestedStackBack } from "../../navigation/useAndroidScreenBack";
 import { APP_BLACK, APP_LIME, APP_SURFACE, APP_TEXT, APP_TEXT_MUTED, APP_TEXT_ON_LIME } from "../../theme/appColors";
+<<<<<<< HEAD
 import { useRentalCart } from "./RentalCartContext";
 import { RENTAL_CATEGORIES, rentalCategoryById } from "./rentalCategories";
 import { catalogForCategory, RENTAL_CATALOG_SUBS, type RentalCatalogItem, type RentalCatalogSub } from "./rentalCatalog";
 import { RENTAL_CART_MAX_QTY } from "./rentalCart";
+=======
+import { portalCategoryForListing, RENTAL_CATEGORIES, rentalCategoryById } from "./rentalCategories";
+import { RENTAL_CATALOG_SUBS, type RentalCatalogItem, type RentalCatalogSub } from "./rentalCatalog";
+import { addRentalCartLine, setRentalCartLine } from "./rentalCart";
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 
 const BACK_ICON = require("../../../assets/market/back-icon.png");
 const SIDE_CARD_W = 74;
@@ -27,11 +41,49 @@ function rupee(n: number) {
 }
 
 function unitPrice(item: RentalCatalogItem) {
+  if (item.price <= 0) return "Rate on request";
+  if (item.reviewLabel === "New") return `${rupee(item.price)}/${item.unitLabel}`;
   return `${rupee(Math.max(1, Math.round(item.price / 10)))}/${item.unitLabel}`;
+}
+
+function liveListingToCatalog(row: {
+  id: string | number;
+  title: string;
+  category: string;
+  channel: string;
+  providerName?: string;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
+}): RentalCatalogItem {
+  const categoryId = portalCategoryForListing(row.category, row.title);
+  const cover = RENTAL_CATALOG_SUBS[categoryId]?.[0];
+  const provider = row.providerName?.trim();
+  const price = Number(String(row.dailyRate ?? "").replace(/[^0-9.]/g, "")) || 0;
+  const uploaded = String(row.imageUrl || "").trim();
+  return {
+    id: String(row.id),
+    categoryId,
+    subCategoryId: cover?.id ?? "all",
+    title: row.title,
+    subtitle: [row.category, row.channel, provider].filter(Boolean).join(" · "),
+    detail: `${row.title} is an approved Cropvibe listing.`,
+    rating: 0,
+    reviewLabel: "New",
+    eta: "Approved",
+    tag: "Approved",
+    options: ["Book"],
+    discountPct: 0,
+    price,
+    mrp: price,
+    unitLabel: row.rateUnit || "Booking",
+    image: uploaded ? { uri: uploaded } : cover?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image
+  };
 }
 
 export function RentalCategoryScreen() {
   useAndroidNestedStackBack();
+  const { token } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "RentalCategory">>();
   const insets = useSafeAreaInsets();
@@ -43,6 +95,34 @@ export function RentalCategoryScreen() {
   const [activeSub, setActiveSub] = useState(subs[0]?.id ?? "");
   const [selected, setSelected] = useState<RentalCatalogItem | null>(null);
   const [option, setOption] = useState("");
+<<<<<<< HEAD
+=======
+  const [quantity, setQuantity] = useState(0);
+  const [liveItems, setLiveItems] = useState<RentalCatalogItem[]>([]);
+  const [loadingLive, setLoadingLive] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setLoadingLive(true);
+      void fetchRentalListings(token)
+        .then((data) => {
+          if (!active) return;
+          const approved = (data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved");
+          setLiveItems(approved.map(liveListingToCatalog));
+        })
+        .catch(() => {
+          if (active) setLiveItems([]);
+        })
+        .finally(() => {
+          if (active) setLoadingLive(false);
+        });
+      return () => {
+        active = false;
+      };
+    }, [token])
+  );
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 
   useEffect(() => {
     setActiveSub(subs[0]?.id ?? "");
@@ -51,8 +131,8 @@ export function RentalCategoryScreen() {
 
   const items = useMemo(() => {
     if (!category) return [];
-    return catalogForCategory(category.id).filter((item) => item.subCategoryId === activeSub);
-  }, [activeSub, category]);
+    return liveItems.filter((item) => item.categoryId === category.id);
+  }, [category, liveItems]);
 
   const mainWidth = width - SIDEBAR_W;
   const cardWidth = Math.floor((mainWidth - 16 - 8) / 2);
@@ -122,6 +202,7 @@ export function RentalCategoryScreen() {
               <SideItem key={sub.id} sub={sub} active={sub.id === activeSub} onPress={() => setActiveSub(sub.id)} />
             ))}
           </ScrollView>
+<<<<<<< HEAD
           <ScrollView
             contentContainerStyle={[styles.grid, { paddingBottom: itemCount > 0 ? 96 : 28 }]}
             showsVerticalScrollIndicator={false}
@@ -135,6 +216,15 @@ export function RentalCategoryScreen() {
                 if (items[0]) openItem(items[0]);
               }}
             />
+=======
+          <ScrollView contentContainerStyle={styles.grid} showsVerticalScrollIndicator={false}>
+            {loadingLive ? <Text style={styles.emptyLive}>Loading approved listings…</Text> : null}
+            {!loadingLive && items.length === 0 ? (
+              <Text style={styles.emptyLive}>
+                No approved listings in this category yet. A listing shows here after admin approves it.
+              </Text>
+            ) : null}
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
             {rows.map((row) => (
               <View key={row.id} style={styles.gridRow}>
                 <View style={{ width: cardWidth }}>
@@ -205,42 +295,6 @@ function SideItem({ sub, active, onPress }: { sub: RentalCatalogSub; active: boo
   );
 }
 
-function RentalBanner({
-  title,
-  location,
-  image,
-  width,
-  onPress
-}: {
-  title: string;
-  location: string;
-  image?: RentalCatalogSub["image"];
-  width: number;
-  onPress: () => void;
-}) {
-  return (
-    <View style={[styles.banner, { width }]}>
-      <LinearGradient
-        colors={["rgba(201, 255, 53, 0.28)", "transparent"]}
-        start={{ x: 1, y: 0 }}
-        end={{ x: 0.2, y: 0.9 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={styles.bannerText}>
-        <Text style={styles.bannerWelcome}>Welcome</Text>
-        <Text style={styles.bannerTitle} numberOfLines={2}>
-          {title}
-        </Text>
-        <Text style={styles.bannerSub}>Book it in {location}</Text>
-        <Pressable style={styles.bannerBtn} onPress={onPress}>
-          <Text style={styles.bannerBtnText}>Book now</Text>
-        </Pressable>
-      </View>
-      {image ? <Image source={image} style={styles.bannerArt} resizeMode="contain" /> : null}
-    </View>
-  );
-}
-
 function RentalCard({
   item,
   categoryTitle,
@@ -269,12 +323,16 @@ function RentalCard({
         />
       </View>
       <View style={styles.ratingRow}>
-        <Ionicons name="star" size={12} color={APP_LIME} />
-        <Text style={styles.ratingText}>
-          {item.rating} | {item.reviewLabel}
-        </Text>
-        <Text style={styles.etaDot}>{"\u2022"}</Text>
-        <Text style={styles.eta}>{item.eta}</Text>
+        {item.rating > 0 ? (
+          <>
+            <Ionicons name="star" size={12} color={APP_LIME} />
+            <Text style={styles.ratingText}>
+              {item.rating} | {item.reviewLabel}
+            </Text>
+            <Text style={styles.etaDot}>{"\u2022"}</Text>
+          </>
+        ) : null}
+        <Text style={styles.eta}>{item.eta || "Approved"}</Text>
       </View>
       <Text style={styles.cardTitle} numberOfLines={1}>
         {item.title}
@@ -298,12 +356,12 @@ function RentalCard({
         })}
       </View>
       <View style={styles.priceBlock}>
-        {item.discountPct > 0 ? <Text style={styles.discount}>{item.discountPct}% OFF</Text> : null}
+        {item.price > 0 && item.discountPct > 0 ? <Text style={styles.discount}>{item.discountPct}% OFF</Text> : null}
         <View style={styles.priceRow}>
-          <Text style={styles.price}>{rupee(item.price)}</Text>
-          {item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
+          <Text style={styles.price}>{item.price > 0 ? rupee(item.price) : "Rate on request"}</Text>
+          {item.price > 0 && item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
         </View>
-        <Text style={styles.unit}>{unitPrice(item)}</Text>
+        {item.price > 0 ? <Text style={styles.unit}>{unitPrice(item)}</Text> : null}
       </View>
     </Pressable>
   );
@@ -364,12 +422,14 @@ function RentalSheet({
                   );
                 })}
                 <View style={styles.sheetPriceSide}>
-                  {item.discountPct > 0 ? <Text style={styles.discount}>{item.discountPct}% OFF</Text> : null}
+                  {item.price > 0 && item.discountPct > 0 ? (
+                    <Text style={styles.discount}>{item.discountPct}% OFF</Text>
+                  ) : null}
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>{rupee(item.price)}</Text>
-                    {item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
+                    <Text style={styles.price}>{item.price > 0 ? rupee(item.price) : "Rate on request"}</Text>
+                    {item.price > 0 && item.mrp > item.price ? <Text style={styles.mrp}>{rupee(item.mrp)}</Text> : null}
                   </View>
-                  <Text style={styles.unit}>{unitPrice(item)}</Text>
+                  {item.price > 0 ? <Text style={styles.unit}>{unitPrice(item)}</Text> : null}
                 </View>
                 {item ? (
                   <CartQtyControl
@@ -451,7 +511,9 @@ const styles = StyleSheet.create({
   sideLabelOn: { color: APP_LIME },
   sideImage: { width: 58, height: 46, marginTop: 4 },
   grid: { paddingHorizontal: 8, paddingBottom: 28 },
+  emptyLive: { color: APP_TEXT_MUTED, fontSize: 13, lineHeight: 18, padding: 16 },
   gridRow: { flexDirection: "row", justifyContent: "space-between", gap: 8, marginBottom: 8 },
+<<<<<<< HEAD
   banner: {
     minHeight: 132,
     borderRadius: 18,
@@ -476,6 +538,8 @@ const styles = StyleSheet.create({
   },
   bannerBtnText: { color: APP_TEXT_ON_LIME, ...rentalType(12, "800") },
   bannerArt: { width: 110, height: 120 },
+=======
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
   card: { backgroundColor: TILE_BG, borderRadius: 12, padding: 8 },
   media: { height: 110, borderRadius: 10, overflow: "hidden", marginBottom: 8, backgroundColor: "#173024" },
   mediaImage: { width: "100%", height: "100%" },

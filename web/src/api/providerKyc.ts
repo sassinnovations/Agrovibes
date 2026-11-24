@@ -1,5 +1,30 @@
 import { API_BASE_URL, fetchWithAuth, fetchWithRetry, parseJsonOrThrow } from "./client";
 
+export async function fetchLocationStates() {
+  const response = await fetchWithRetry(`${API_BASE_URL}/v1/locations/states`, { method: "GET" });
+  return (await parseJsonOrThrow(response)) as { states: { code: string; name: string }[] };
+}
+
+export async function fetchLocationDistricts(state: string) {
+  const response = await fetchWithRetry(
+    `${API_BASE_URL}/v1/locations/districts?state=${encodeURIComponent(state)}`,
+    { method: "GET" }
+  );
+  return (await parseJsonOrThrow(response)) as { districts: string[] };
+}
+
+export async function fetchLocationCities(state: string, district: string) {
+  const params = new URLSearchParams({ state, district });
+  const response = await fetchWithRetry(`${API_BASE_URL}/v1/locations/cities?${params.toString()}`, { method: "GET" });
+  return (await parseJsonOrThrow(response)) as { cities: string[] };
+}
+
+export async function fetchLocationPin(state: string, district: string, city: string) {
+  const params = new URLSearchParams({ state, district, city });
+  const response = await fetchWithRetry(`${API_BASE_URL}/v1/locations/pincode?${params.toString()}`, { method: "GET" });
+  return (await parseJsonOrThrow(response)) as { pinCode: string };
+}
+
 export async function startProviderDigilocker(
   token: string,
   payload: { fullName?: string; phone?: string }
@@ -75,6 +100,9 @@ export type ProviderListing = {
   channel: string;
   status: string;
   rcNumber?: string | null;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
   createdAt: string;
 };
 
@@ -86,7 +114,15 @@ export async function fetchProviderListings(token: string) {
 
 export async function submitProviderListing(
   token: string,
-  payload: { title: string; category: string; channel: string; rcNumber?: string }
+  payload: {
+    title: string;
+    category: string;
+    channel: string;
+    rcNumber?: string;
+    imageUrl?: string;
+    dailyRate?: string | number;
+    rateUnit?: string;
+  }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {
     method: "POST",
@@ -114,7 +150,18 @@ export async function fetchProviderBookings(token: string) {
   };
 }
 
-export async function confirmProviderPhone(token: string, payload: { phone: string; code: string }) {
+export async function sendProviderPhoneOtp(token: string, payload: { phone: string }) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/auth/phone/send-otp`, token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, purpose: "provider" })
+  })) as { success: boolean; phone: string; provider?: string; channel?: string };
+}
+
+export async function confirmProviderPhone(
+  token: string,
+  payload: { phone: string; code?: string; accessToken?: string }
+) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/phone/confirm`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

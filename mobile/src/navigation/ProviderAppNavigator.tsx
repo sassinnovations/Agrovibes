@@ -1,7 +1,7 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { ProviderTabBar } from "./ProviderTabBar";
+import { ProviderTabBar, providerSidebarWidth } from "./ProviderTabBar";
 
 export type ProviderTabParamList = {
   Overview: undefined;
@@ -18,6 +18,9 @@ const Tab = createBottomTabNavigator<ProviderTabParamList>();
  * Farmer social tabs remain in AppNavigator.
  */
 export function ProviderAppNavigator() {
+  const { width } = useWindowDimensions();
+  const sidebarWidth = providerSidebarWidth(width);
+
   return (
     <View style={styles.root}>
       <Tab.Navigator
@@ -28,22 +31,11 @@ export function ProviderAppNavigator() {
           lazy: true,
           freezeOnBlur: true,
           sceneContainerStyle: {
-            backgroundColor: "#303132"
+            backgroundColor: "#303132",
+            marginLeft: sidebarWidth
           },
           tabBarStyle: {
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: undefined,
-            backgroundColor: "transparent",
-            borderTopWidth: 0,
-            borderTopColor: "transparent",
-            borderWidth: 0,
-            elevation: 0,
-            shadowOpacity: 0,
-            shadowRadius: 0,
-            shadowOffset: { width: 0, height: 0 }
+            display: "none"
           }
         }}
         safeAreaInsets={{ top: 0 }}

@@ -42,6 +42,13 @@ export const RENTAL_CATEGORIES: RentalCategory[] = [
     wash: "#2a2e1e"
   },
   {
+    id: "land",
+    title: "Land",
+    blurb: "Farmland and plots available to rent.",
+    icon: "map-outline",
+    wash: "#1c2b22"
+  },
+  {
     id: "labour",
     title: "Farm Labour",
     blurb: "Field crews for sowing, weeding, and harvest.",
@@ -78,6 +85,7 @@ export type BookableRental = {
 
 export function portalCategoryForListing(category: string, title: string): string {
   const text = `${category} ${title}`.toLowerCase();
+  if (text.includes("land") || text.includes("farmland") || text.includes("acre")) return "land";
   if (text.includes("drone")) return "drone";
   if (text.includes("driver") || text.includes("operator")) return "drivers";
   if (/(labour|labor|manual)/.test(text)) return "labour";

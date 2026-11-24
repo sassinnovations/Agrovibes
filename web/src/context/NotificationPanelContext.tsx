@@ -45,12 +45,47 @@ function isLivePostEnded(entry: SocialPostActivityNotification) {
   return status === "ended" || Boolean(entry.postLiveEndedAt);
 }
 
+function plainExcerpt(value?: string | null) {
+  const text = String(value || "").trim();
+  if (!text.startsWith("{")) return text;
+  try {
+    const parsed = JSON.parse(text) as { kind?: string; status?: string };
+    if (!parsed || typeof parsed !== "object") return "";
+    return "";
+  } catch {
+    return text;
+  }
+}
+
+function providerPayloadStatus(value?: string | null) {
+  const text = String(value || "").trim();
+  if (!text.startsWith("{")) return "";
+  try {
+    const parsed = JSON.parse(text) as { kind?: string; status?: string };
+    if (parsed?.kind === "provider_kyc") return String(parsed.status || "").toLowerCase();
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 function activityLabel(entry: SocialPostActivityNotification) {
   const name = entry.actorName || "Someone";
   const kind = entry.postIsReel ? "reel" : "post";
-  const excerpt = entry.commentExcerpt?.trim() ? `: "${entry.commentExcerpt.trim()}"` : "";
+  const note = plainExcerpt(entry.commentExcerpt);
+  const excerpt = note ? `: "${note}"` : "";
+  const providerStatus = providerPayloadStatus(entry.commentExcerpt);
   if (entry.type === "comment_reply") return `${name} replied to your comment${excerpt}`;
-  if (entry.type === "weather_alert") return String(entry.commentExcerpt || "").trim() || "Weather alert";
+  if (entry.type === "provider_kyc_approved" || providerStatus === "approved") {
+    return note || "Admin approved your provider registration. You can add listings now.";
+  }
+  if (entry.type === "provider_kyc_rejected" || providerStatus === "rejected") {
+    return note || "Admin rejected your provider registration. You can review and submit again.";
+  }
+  if (entry.type === "provider_kyc_submitted" || providerStatus === "submitted") {
+    return note || "A provider submitted KYC and is waiting for review.";
+  }
+  if (entry.type === "weather_alert") return note || "Weather alert";
   if (entry.type === "post_comment") return `${name} commented on your ${kind}${excerpt}`;
   if (entry.type === "post_tag") return `${name} tagged you in a ${kind}`;
   if (entry.type === "live_host_reminder") return "It's time to start your scheduled live";
@@ -167,7 +202,11 @@ export function NotificationPanelProvider({ children }: { children: ReactNode })
       const nextNewFollows = data.newFollows || [];
       const nextPostLikes = data.postLikes || [];
       const nextPostComments = data.postComments || [];
-      const nextLiveStarts = [...(data.liveStarts || []), ...(data.weatherAlerts || [])];
+      const nextLiveStarts = [
+        ...(data.liveStarts || []),
+        ...(data.weatherAlerts || []),
+        ...(data.providerUpdates || [])
+      ];
       setFollowRequests(nextFollowRequests);
       setFollowAccepted(nextFollowAccepted);
       setNewFollows(nextNewFollows);

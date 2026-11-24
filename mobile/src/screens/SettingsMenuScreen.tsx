@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -96,42 +95,6 @@ function SettingsRowList({ items }: { items: SettingsRowItem[] }) {
         return <SettingsRow key={key} {...rowProps} showDivider={index < items.length - 1} />;
       })}
     </>
-  );
-}
-
-function PromoCard({ onPress }: { onPress?: () => void }) {
-  return (
-    <Pressable
-      style={styles.promoWrap}
-      onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole="button"
-      accessibilityLabel="Join As Provider"
-    >
-      <View style={styles.promoCard}>
-        <LinearGradient
-          colors={["rgba(201, 255, 53, 0.45)", "rgba(201, 255, 53, 0)"]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 0.55, y: 0.5 }}
-          style={styles.promoGlowLeft}
-          pointerEvents="none"
-        />
-        <LinearGradient
-          colors={["rgba(201, 255, 53, 0)", "rgba(201, 255, 53, 0.35)"]}
-          start={{ x: 0.45, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={styles.promoGlowRight}
-          pointerEvents="none"
-        />
-        <Text style={styles.promoTitle}>
-          Rent It. Service It. <Text style={styles.promoTitleAccent}>Earn</Text>
-        </Text>
-        <Text style={styles.promoSubtitle}>Machinery. Experts. Opportunity.</Text>
-        <View style={styles.promoCta}>
-          <Text style={styles.promoCtaText}>Join As Provider</Text>
-        </View>
-      </View>
-    </Pressable>
   );
 }
 
@@ -292,18 +255,6 @@ export function SettingsMenuScreen() {
             title={labels.accountCenter}
             subtitle={labels.accountCenterSub}
             onPress={() => setAccountCenterOpen(true)}
-            showDivider={false}
-          />
-        </SettingsSection>
-
-        <PromoCard onPress={() => navigation.navigate("ProviderOnboarding")} />
-
-        <SettingsSection title="Provider">
-          <SettingsRow
-            icon="storefront-outline"
-            title="Open provider dashboard"
-            subtitle="Overview, rental, listings, and services"
-            onPress={() => navigation.navigate("ProviderMain")}
             showDivider={false}
           />
         </SettingsSection>
@@ -557,68 +508,6 @@ const styles = StyleSheet.create({
   rowDivider: {
     height: 1,
     backgroundColor: DIVIDER
-  },
-  promoWrap: {
-    marginBottom: 16
-  },
-  promoCard: {
-    backgroundColor: "#1a1b1c",
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingTop: 20,
-    paddingBottom: 18,
-    overflow: "hidden",
-    minHeight: 132,
-    borderWidth: 1,
-    borderColor: "rgba(201, 255, 53, 0.12)"
-  },
-  promoGlowLeft: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: 120
-  },
-  promoGlowRight: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: 100
-  },
-  promoTitle: {
-    color: TEXT,
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-    lineHeight: 28
-  },
-  promoTitleAccent: {
-    color: LIME,
-    fontWeight: "800"
-  },
-  promoSubtitle: {
-    color: MUTED,
-    fontSize: 13,
-    fontWeight: "500",
-    marginTop: 6,
-    letterSpacing: 0.1
-  },
-  promoCta: {
-    alignSelf: "flex-start",
-    marginTop: 16,
-    backgroundColor: "#0d0d0d",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(201, 255, 53, 0.28)"
-  },
-  promoCtaText: {
-    color: LIME,
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.1
   },
   footerSection: {
     marginTop: 8,

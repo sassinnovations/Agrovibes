@@ -1,4 +1,4 @@
-const STORAGE_KEY = "cropvibe.provider.listingImages.v1";
+const STORAGE_KEY = "cropvibe.provider.listingImages.v2";
 
 function readMap(): Record<string, string> {
   try {

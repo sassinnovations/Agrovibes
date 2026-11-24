@@ -33,6 +33,8 @@ import { ProviderListingsPage } from "../pages/provider/ProviderListingsPage";
 import { ProviderNewListingPage } from "../pages/provider/ProviderNewListingPage";
 import { ProviderServicesPage } from "../pages/provider/ProviderServicesPage";
 import { ProviderProfilePage } from "../pages/provider/ProviderProfilePage";
+import { RentalsPortalPage } from "../pages/rentals/RentalsPortalPage";
+import { RentalCategoryPage } from "../pages/rentals/RentalCategoryPage";
 
 function ProtectedLayout() {
   const { token, loading } = useAuth();
@@ -66,6 +68,8 @@ export function AppRoutes() {
       <Route element={<ProtectedLayout />}>
         <Route index element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
+        <Route path="rentals" element={<RentalsPortalPage />} />
+        <Route path="rentals/:categoryId" element={<RentalCategoryPage />} />
         <Route path="drops" element={<ReelsPage />} />
         <Route path="reels" element={<Navigate to="/drops" replace />} />
         <Route

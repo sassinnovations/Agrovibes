@@ -94,7 +94,7 @@ export async function fetchNotificationFeedSnapshot(params: {
   const remoteNewFollows = remote?.newFollows || [];
   const remotePostLikes = remote?.postLikes || [];
   const remotePostComments = remote?.postComments || [];
-  const remoteLiveStarts = remote?.liveStarts || [];
+  const remoteLiveStarts = [...(remote?.liveStarts || []), ...(remote?.providerUpdates || [])];
   const remoteWeatherAlerts = remote?.weatherAlerts || [];
 
   const { rows: mergedPending, droppedUnread: droppedPendingUnread } = dedupeFollowRequests([

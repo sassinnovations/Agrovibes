@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchHomePosts, fetchHomeStories } from "../api/home";
 import type { HomePost, HomeStory } from "../api/types";
+import { ProviderPromoBanner } from "../components/provider/ProviderPromoBanner";
+import { useProviderJourney } from "../components/provider/useProviderJourney";
 import { PostCard } from "../components/feed/PostCard";
 import { HomeStories } from "../components/feed/HomeStories";
 import { useAuth } from "../auth/AuthContext";
@@ -9,6 +11,7 @@ import "./HomePage.css";
 
 export function HomePage() {
   const { token, user } = useAuth();
+  const journey = useProviderJourney(token);
   const [posts, setPosts] = useState<HomePost[]>([]);
   const [stories, setStories] = useState<HomeStory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +57,7 @@ export function HomePage() {
         token={token}
         onStoryDeleted={(storyId) => setStories((prev) => prev.filter((story) => story.id !== storyId))}
       />
+      <ProviderPromoBanner journey={journey} />
 
       {loading ? <p className="home-page__status">Loading feed…</p> : null}
       {error ? <p className="home-page__error">{error}</p> : null}

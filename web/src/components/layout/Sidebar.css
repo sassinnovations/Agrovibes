@@ -13,7 +13,8 @@
   transition: width 0.2s ease, box-shadow 0.2s ease;
 }
 
-.sidebar:hover {
+.sidebar:hover,
+.sidebar--open {
   width: var(--sidebar-width-expanded);
   box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
 }
@@ -61,11 +62,13 @@
   transition: max-width 0.2s ease, opacity 0.15s ease;
 }
 
-.sidebar:hover .sidebar__logo-icon {
+.sidebar:hover .sidebar__logo-icon,
+.sidebar--open .sidebar__logo-icon {
   display: none;
 }
 
-.sidebar:hover .sidebar__logo-wordmark {
+.sidebar:hover .sidebar__logo-wordmark,
+.sidebar--open .sidebar__logo-wordmark {
   max-width: calc(var(--sidebar-width-expanded) - 28px);
   width: auto;
   height: 26px;
@@ -173,7 +176,8 @@
   transition: opacity 0.15s ease, max-width 0.2s ease;
 }
 
-.sidebar:hover .sidebar__label {
+.sidebar:hover .sidebar__label,
+.sidebar--open .sidebar__label {
   opacity: 1;
   max-width: 160px;
   pointer-events: auto;

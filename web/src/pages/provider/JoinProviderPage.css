@@ -72,6 +72,37 @@
   color: #c9ff35;
 }
 
+.join-phone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.join-phone-row .join-input {
+  flex: 1;
+  margin-bottom: 10px;
+}
+
+.join-otp-btn {
+  flex: 0 0 auto;
+  min-height: 46px;
+  margin-bottom: 10px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: #c9ff35;
+  color: #262626;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.join-otp-btn:disabled {
+  background: #3a3a3a;
+  color: #888;
+  cursor: not-allowed;
+}
+
 .join-input {
   width: 100%;
   box-sizing: border-box;
@@ -81,6 +112,60 @@
   background: #2b2c2e;
   color: #f8fafc;
   padding: 13px 14px;
+  font-size: 14px;
+}
+
+.join-label {
+  display: block;
+  margin-bottom: 10px;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.join-label .join-input {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.join-combo {
+  position: relative;
+}
+
+.join-combo__list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% - 2px);
+  z-index: 8;
+  max-height: 220px;
+  overflow: auto;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.join-combo__option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: #f8fafc;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 14px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.join-combo__option.is-active {
+  color: #c9ff35;
+}
+
+.join-combo__empty {
+  margin: 0;
+  padding: 14px;
+  color: #a8b0b8;
   font-size: 14px;
 }
 

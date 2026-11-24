@@ -9,9 +9,15 @@ export type AdminListingRow = {
   subtitle: string;
   submitterName: string;
   submitterEmail: string;
+  submitterRole?: string;
   submitterAvatarUrl?: string | null;
   date: string | null;
   flags: number;
+  rate?: string | number | null;
+  channel?: string;
+  categoryName?: string;
+  rcNumber?: string;
+  removalReason?: string;
   status: "Pending" | "Approved" | "Unpublished";
 };
 
@@ -30,14 +36,19 @@ export async function fetchAdminListings(token: string) {
   return (await parseJsonOrThrow(response)) as { listings: AdminListingRow[] };
 }
 
-export async function respondAdminListing(token: string, listingId: number, action: "approve" | "unpublish") {
+export async function respondAdminListing(
+  token: string,
+  listingId: number,
+  action: "approve" | "unpublish",
+  reason?: string
+) {
   const response = await fetch(`${API_BASE}/v1/admin/listings/${listingId}/respond`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ action })
+    body: JSON.stringify({ action, reason: reason || "" })
   });
   return (await parseJsonOrThrow(response)) as { listing: { id: number; status: AdminListingRow["status"] } };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import {
   addProviderEquipment,
@@ -7,11 +7,10 @@ import {
   fetchProviderEquipment,
   fetchProviderKycStatus,
   startProviderDigilocker,
-  confirmProviderPhone,
   submitProviderKyc,
   verifyProviderPan
 } from "../../api/providerKyc";
-import { sendPhoneOtp } from "../../api/auth";
+import { sendProviderOtpWithMsg91, verifyProviderOtpWithMsg91 } from "../../api/msg91Widget";
 import { SettingsIconBack } from "../../components/settings/SettingsIcons";
 import "../settings/SettingsMenuPage.css";
 import {
@@ -22,6 +21,7 @@ import {
   type ProviderTrack
 } from "./providerDraft";
 import "./JoinProviderPage.css";
+import { AddressDetailsFields } from "./AddressDetailsFields";
 
 type Step = "intro" | "terms" | "role" | "type" | "details" | "aadhaar" | "pan" | "review" | "awaiting" | "done";
 
@@ -71,7 +71,9 @@ function gstOk(value: string) {
 export function JoinProviderPage() {
   const navigate = useNavigate();
   const { token } = useAuth();
-  const [step, setStep] = useState<Step>("intro");
+  const [searchParams] = useSearchParams();
+  const openedAtSelection = searchParams.get("step") === "role";
+  const [step, setStep] = useState<Step>(openedAtSelection ? "role" : "intro");
   const [approval, setApproval] = useState("pending");
   const [equipment, setEquipment] = useState<Array<{ id: number; name: string; category: string; dailyRate?: string | null }>>([]);
   const [equipName, setEquipName] = useState("");
@@ -85,6 +87,7 @@ export function JoinProviderPage() {
   const [busy, setBusy] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [otpReqId, setOtpReqId] = useState("");
   const [kycStatus, setKycStatus] = useState<"idle" | "pending" | "verified" | "failed">(
     readProviderDraft().digilockerVerified ? "verified" : "idle"
   );
@@ -171,7 +174,10 @@ export function JoinProviderPage() {
     else if (step === "terms") {
       if (termsPage === 2) setTermsPage(1);
       else setStep("intro");
-    } else if (step === "role") setStep("terms");
+    } else if (step === "role") {
+      if (openedAtSelection) navigate("/");
+      else setStep("terms");
+    }
     else if (step === "type") setStep("role");
     else if (step === "details") setStep("type");
     else if (step === "aadhaar") setStep("details");
@@ -191,18 +197,26 @@ export function JoinProviderPage() {
       draft.street.trim().length > 0 &&
       draft.village.trim().length > 0 &&
       draft.district.trim().length > 0 &&
-      draft.state.trim().length > 0
+      draft.state.trim().length > 0 &&
+      draft.pinCode.length === 6
     : draft.fullName.trim().length > 1 &&
       draft.phone.trim().length >= 10 &&
       draft.phoneOtpVerified &&
+      isValidEmail(draft.email) &&
+      draft.street.trim().length > 0 &&
       draft.village.trim().length > 0 &&
       draft.district.trim().length > 0 &&
       draft.state.trim().length > 0 &&
+      draft.pinCode.length === 6 &&
       emailOk;
   const panOk = /^[A-Z]{5}[0-9]{4}[A-Z]$/.test(draft.panNumber);
 
   const sendOtp = async () => {
     const digits = draft.phone.replace(/\D/g, "").slice(-10);
+    if (!token) {
+      setError("Sign in again, then verify the mobile number.");
+      return;
+    }
     if (digits.length < 10) {
       setError("Enter a 10-digit mobile number first.");
       return;
@@ -210,9 +224,18 @@ export function JoinProviderPage() {
     setBusy(true);
     setError("");
     try {
-      await sendPhoneOtp({ phone: digits });
+      const sent = await sendProviderOtpWithMsg91(token, digits);
+      if (sent.verified) {
+        patch({ phoneOtpVerified: true });
+        setOtpReqId("");
+        setOtpSent(true);
+        return;
+      }
+      setOtpReqId(sent.reqId);
+      setOtp("");
       setOtpSent(true);
     } catch (err) {
+      setOtpSent(false);
       setError(err instanceof Error ? err.message : "Could not send OTP.");
     } finally {
       setBusy(false);
@@ -224,14 +247,15 @@ export function JoinProviderPage() {
       setError("Sign in again, then verify the mobile number.");
       return;
     }
+    const digits = draft.phone.replace(/\D/g, "").slice(-10);
+    if (!otpReqId) {
+      setError("Tap Get OTP, then enter the code.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const result = await confirmProviderPhone(token, { phone: draft.phone.replace(/\D/g, "").slice(-10), code: otp });
-      if (!result.verified) {
-        setError("That code was not accepted.");
-        return;
-      }
+      await verifyProviderOtpWithMsg91(token, digits, otpReqId, otp);
       patch({ phoneOtpVerified: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "That code was not accepted.");
@@ -354,6 +378,10 @@ export function JoinProviderPage() {
       setError("Verify Aadhaar with DigiLocker before submitting.");
       return;
     }
+    if (!isValidEmail(draft.email)) {
+      setError("Enter the email from your basic details.");
+      return;
+    }
     if (draft.gstNumber.trim() && !gstOk(draft.gstNumber)) {
       setError("Enter a valid GST number.");
       return;
@@ -398,7 +426,7 @@ export function JoinProviderPage() {
           <SettingsIconBack />
         </button>
         <h1 className="settings-topbar__title">
-          {step === "intro" ? "Join As Provider" : step === "terms" ? "Terms And Condition" : "Provider Verification"}
+          {step === "intro" ? "Become a Rental Provider" : step === "terms" ? "Terms And Condition" : "Provider Verification"}
         </h1>
         <span className="settings-topbar__spacer" />
       </header>
@@ -407,13 +435,13 @@ export function JoinProviderPage() {
         {step === "intro" ? (
           <section className="join-card">
             <p className="join-kicker">Rent It. Service It. Earn</p>
-            <h2>Become a Provider</h2>
+            <h2>Become a Rental Provider</h2>
             <p>
               Individuals verify with DigiLocker Aadhaar. Businesses also add PAN or GST. Admin reviews the
               application after you submit.
             </p>
             <button type="button" className="join-btn" onClick={() => setStep("terms")}>
-              Become A Provider
+              Become a Rental Provider
             </button>
           </section>
         ) : null}
@@ -452,7 +480,7 @@ export function JoinProviderPage() {
                 disabled={!accepted}
                 onClick={() => setStep("role")}
               >
-                Accept And Join As Provider
+                Accept And Become a Rental Provider
               </button>
             )}
           </section>
@@ -535,54 +563,53 @@ export function JoinProviderPage() {
               value={draft.fullName}
               onChange={(event) => patch({ fullName: event.target.value })}
             />
-            <input
-              className="join-input"
-              placeholder="Mobile Number *"
-              value={draft.phone}
-              onChange={(event) => patch({ phone: event.target.value, phoneOtpVerified: false })}
-            />
-            <input
-              className="join-input"
-              placeholder="6-digit OTP"
-              value={otp}
-              onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            />
-            <button type="button" className="join-btn" disabled={busy || draft.phoneOtpVerified} onClick={() => void (otpSent ? checkOtp() : sendOtp())}>
-              {draft.phoneOtpVerified ? "Mobile verified" : otpSent ? "Verify OTP" : "Send OTP"}
-            </button>
+            <div className="join-phone-row">
+              <input
+                className="join-input"
+                placeholder="Mobile Number *"
+                value={draft.phone}
+                onChange={(event) => {
+                  patch({ phone: event.target.value, phoneOtpVerified: false });
+                  setOtpSent(false);
+                  setOtpReqId("");
+                  setOtp("");
+                }}
+              />
+              <button
+                type="button"
+                className="join-otp-btn"
+                disabled={busy || draft.phoneOtpVerified || (otpSent && otp.length === 6 ? false : draft.phone.replace(/\D/g, "").length < 10)}
+                onClick={() => void (otpSent && otp.length === 6 ? checkOtp() : sendOtp())}
+              >
+                {draft.phoneOtpVerified ? "Verified" : busy ? (otpSent && otp.length === 6 ? "Verifying…" : "Sending…") : otpSent && otp.length === 6 ? "Verify OTP" : "Get OTP"}
+              </button>
+            </div>
+            {otpSent && !draft.phoneOtpVerified ? (
+              <input
+                className="join-input"
+                placeholder="Enter 6-digit OTP"
+                value={otp}
+                inputMode="numeric"
+                onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
+            ) : null}
             <input
               className="join-input"
               placeholder={isBusiness ? "Email Address *" : "Email Address (optional)"}
               value={draft.email}
               onChange={(event) => patch({ email: event.target.value })}
             />
-            {isBusiness ? (
-              <input
-                className="join-input"
-                placeholder="Street / House No. *"
-                value={draft.street}
-                onChange={(event) => patch({ street: event.target.value })}
-              />
-            ) : (
-              <h3 className="join-location">Location</h3>
-            )}
-            <input
-              className="join-input"
-              placeholder="Village / Town *"
-              value={draft.village}
-              onChange={(event) => patch({ village: event.target.value })}
-            />
-            <input
-              className="join-input"
-              placeholder="District *"
-              value={draft.district}
-              onChange={(event) => patch({ district: event.target.value })}
-            />
-            <input
-              className="join-input"
-              placeholder="State *"
-              value={draft.state}
-              onChange={(event) => patch({ state: event.target.value })}
+            <AddressDetailsFields
+              address={draft.street}
+              stateName={draft.state}
+              district={draft.district}
+              city={draft.village}
+              pinCode={draft.pinCode}
+              onChangeAddress={(street) => patch({ street })}
+              onChangeState={(state) => patch({ state, district: "", village: "", pinCode: "" })}
+              onChangeDistrict={(district) => patch({ district, village: "", pinCode: "" })}
+              onChangeCity={(village) => patch({ village, pinCode: "" })}
+              onChangePin={(pinCode) => patch({ pinCode })}
             />
             {isBusiness ? (
               <>
@@ -825,9 +852,12 @@ export function JoinProviderPage() {
         {step === "done" ? (
           <section className="join-card">
             <h2>Submitted For Approval</h2>
-            <p>Admin has been notified. Your KYC will appear in Admin → KYC Verification for approval.</p>
-            <button type="button" className="join-btn" onClick={() => navigate("/settings")}>
-              Back to settings
+            <p>
+              Your application is with admin. We emailed the admin team. Stay on the CropVibe feed until you get an
+              approval or rejection notification. After approval you can add listings.
+            </p>
+            <button type="button" className="join-btn" onClick={() => navigate("/")}>
+              Go to CropVibe feed
             </button>
           </section>
         ) : null}

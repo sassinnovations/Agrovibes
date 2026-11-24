@@ -1,5 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { fetchProviderKycStatus, fetchProviderListings, submitProviderKyc, submitProviderListing } from "./api";
+import {
+  fetchProviderKycStatus,
+  fetchProviderListings,
+  submitProviderKyc,
+  submitProviderListing,
+  updateProviderListing,
+  uploadImageFile
+} from "./api";
 
 export type ProviderApprovalStatus = "not_submitted" | "pending" | "approved" | "rejected";
 export type ListingApprovalStatus = "pending" | "approved" | "rejected";
@@ -24,6 +31,7 @@ export type ProviderRegistrationDraft = {
   village: string;
   district: string;
   state: string;
+  pinCode?: string;
   gstNumber: string;
   yearsExperience: string;
   holderName?: string;
@@ -57,8 +65,10 @@ export type ProviderListingRecord = {
   status: ListingApprovalStatus;
   createdAt: string;
   approvedAt?: string;
-  /** Local photo. The listings API does not store images. */
+  /** Uploaded photo URL, or a local file URI until upload finishes. */
   imageUri?: string;
+  dailyRate?: number;
+  rateUnit?: string;
   rcNumber?: string;
   /** Set when this phone copy has not been inserted into provider_listings. */
   serverError?: string;
@@ -95,7 +105,7 @@ type ProviderWorkflowState = {
   notifications: WorkflowNotification[];
 };
 
-const STORAGE_KEY = "agrovibes.provider.workflow.v1";
+const STORAGE_KEY = "agrovibes.provider.workflow.v2";
 
 const DEFAULT_STATE: ProviderWorkflowState = {
   registrationStatus: "not_submitted",
@@ -123,6 +133,13 @@ function uploadFailureMessage(error: unknown): string {
 
 export function listingReachedServer(listing: Pick<ProviderListingRecord, "id">): boolean {
   return isServerListingId(listing.id);
+}
+
+export function normalizeListingStatus(status: string): ListingApprovalStatus {
+  const value = String(status || "").toLowerCase();
+  if (value === "approved") return "approved";
+  if (value === "rejected" || value === "unpublished") return "rejected";
+  return "pending";
 }
 
 export function listingStatusText(listing: ProviderListingRecord): string {
@@ -259,6 +276,7 @@ export async function updateProviderRegistrationDraft(
     village: "",
     district: "",
     state: "",
+    pinCode: "",
     gstNumber: "",
     yearsExperience: "",
     documentLabels: [],
@@ -293,6 +311,9 @@ export async function submitProviderRegistrationForApproval(token?: string | nul
   if (!draft?.phoneOtpVerified) {
     throw new Error("Verify the mobile number with OTP before submitting.");
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(draft?.email || "").trim())) {
+    throw new Error("Enter the email from your basic details.");
+  }
   if (!draft?.digilockerVerified) {
     throw new Error("Verify Aadhaar with DigiLocker before submitting.");
   }
@@ -306,7 +327,7 @@ export async function submitProviderRegistrationForApproval(token?: string | nul
     throw new Error("Please sign in again, then submit for review.");
   }
 
-  const address = [draft?.street, draft?.village, draft?.district, draft?.state]
+  const address = [draft?.street, draft?.village, draft?.district, draft?.state, draft?.pinCode]
     .filter(Boolean)
     .join(", ");
   await submitProviderKyc(token, {
@@ -346,22 +367,38 @@ export async function submitProviderRegistrationForApproval(token?: string | nul
   await writeState(next);
 }
 
+function listingAmount(value: unknown) {
+  const amount = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+}
+
 export async function submitListingForApproval(input: {
   title: string;
   category: string;
   channel: string;
   imageUri?: string;
+  dailyRate?: string | number;
+  rateUnit?: string;
   rcNumber?: string;
   token?: string | null;
 }): Promise<string> {
   if (!input.token) {
     throw new Error("Please sign in again, then submit the listing.");
   }
+  let imageUrl = /^https?:\/\//i.test(String(input.imageUri || "")) ? String(input.imageUri) : "";
+  if (input.imageUri && !imageUrl) {
+    const uploaded = await uploadImageFile(input.imageUri);
+    imageUrl = uploaded.url;
+  }
+  const dailyRate = listingAmount(input.dailyRate);
   const created = await submitProviderListing(input.token, {
     title: input.title,
     category: input.category,
     channel: input.channel,
-    rcNumber: input.rcNumber
+    rcNumber: input.rcNumber,
+    imageUrl: imageUrl || undefined,
+    dailyRate,
+    rateUnit: input.rateUnit
   });
   const serverId = Number(created?.listing?.id);
   if (!Number.isFinite(serverId) || serverId <= 0) {
@@ -375,7 +412,9 @@ export async function submitListingForApproval(input: {
     category: input.category,
     channel: input.channel,
     status: "pending",
-    imageUri: input.imageUri,
+    imageUri: imageUrl || input.imageUri,
+    dailyRate,
+    rateUnit: input.rateUnit,
     rcNumber: input.rcNumber,
     createdAt: created.listing?.createdAt || new Date().toISOString()
   };
@@ -391,52 +430,6 @@ export async function submitListingForApproval(input: {
   );
   await writeState(state);
   return listingId;
-}
-
-/**
- * Local helper for listing approvals demo. KYC approval now comes from Admin API.
- */
-export async function processAdminApprovals(): Promise<{ registrationApproved: boolean; listingsApproved: number }> {
-  let state = await readState();
-  let registrationApproved = false;
-  let listingsApproved = 0;
-
-  const updatedListings = state.listings.map((listing) => {
-    if (listing.status !== "pending") return listing;
-    listingsApproved += 1;
-    return {
-      ...listing,
-      status: "approved" as ListingApprovalStatus,
-      approvedAt: new Date().toISOString()
-    };
-  });
-  if (listingsApproved > 0) {
-    state = {
-      ...state,
-      listings: updatedListings
-    };
-    state = pushNotification(
-      state,
-      "provider",
-      "Listing Approved",
-      `${listingsApproved} listing(s) approved by admin and ready for customers.`
-    );
-  }
-
-  await writeState(state);
-  return { registrationApproved, listingsApproved };
-}
-
-export async function markProviderRegistrationApprovedLocally(): Promise<void> {
-  let state = await readState();
-  state = { ...state, registrationStatus: "approved" };
-  state = pushNotification(
-    state,
-    "provider",
-    "Registration Approved",
-    "Admin approved your profile. You can now start your business."
-  );
-  await writeState(state);
 }
 
 export async function uploadLocalListings(token?: string | null): Promise<ProviderListingRecord[]> {
@@ -457,7 +450,10 @@ export async function uploadLocalListings(token?: string | null): Promise<Provid
       const created = await submitProviderListing(token, {
         title: row.title,
         category: row.category,
-        channel: row.channel
+        channel: row.channel,
+        imageUrl: /^https?:\/\//i.test(String(row.imageUri || "")) ? row.imageUri : undefined,
+        dailyRate: row.dailyRate,
+        rateUnit: row.rateUnit
       });
       const serverId = Number(created?.listing?.id);
       if (!Number.isFinite(serverId) || serverId <= 0) {
@@ -504,13 +500,29 @@ export async function syncProviderListingsFromApi(token?: string | null): Promis
       title: row.title,
       category: row.category,
       channel: row.channel,
-      status: row.status === "approved" ? "approved" : row.status === "rejected" ? "rejected" : "pending",
-      imageUri: imageById.get(String(row.id)) || imageByTitle.get(row.title),
+      status: normalizeListingStatus(row.status),
+      imageUri: /^https?:\/\//i.test(String(row.imageUrl || ""))
+        ? String(row.imageUrl)
+        : imageById.get(String(row.id)) || imageByTitle.get(row.title),
+      dailyRate: listingAmount(row.dailyRate),
+      rateUnit: row.rateUnit || undefined,
       rcNumber: row.rcNumber || rcById.get(String(row.id)) || rcByTitle.get(row.title),
       createdAt: row.createdAt
     }));
+    if (token) {
+      for (const row of remoteRows) {
+        const localImage = row.imageUri || imageById.get(row.id) || imageByTitle.get(row.title);
+        if (!localImage || /^https?:\/\//i.test(localImage)) continue;
+        try {
+          const uploaded = await uploadImageFile(localImage);
+          await updateProviderListing(token, row.id, { imageUrl: uploaded.url, dailyRate: row.dailyRate, rateUnit: row.rateUnit });
+          row.imageUri = uploaded.url;
+        } catch {
+          row.imageUri = localImage;
+        }
+      }
+    }
     const localOnly = state.listings.filter((row) => !isServerListingId(row.id));
-    if (!remoteRows.length && state.listings.length) return state.listings;
     const listings = [...remoteRows, ...localOnly];
     await writeState({ ...state, listings });
     return listings;

@@ -103,7 +103,10 @@ const SOCIAL_NOTIF_SOCKET_TYPES = new Set([
   "live_start",
   "live_scheduled",
   "live_reminder",
-  "live_host_reminder"
+  "live_host_reminder",
+  "provider_kyc_submitted",
+  "provider_kyc_approved",
+  "provider_kyc_rejected"
 ]);
 
 function fireSocialPush(payload) {
@@ -342,6 +345,8 @@ async function ensureLearnUsersTable() {
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS location_updated_at TIMESTAMPTZ`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active'`);
+  await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS moderation_reason TEXT`);
+  await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS moderation_until TIMESTAMPTZ`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS is_private BOOLEAN NOT NULL DEFAULT false`);
   await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`);
   learnUsersTableReady = true;
@@ -621,8 +626,48 @@ function normalizeKycDocuments(raw) {
   return out;
 }
 
-async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role) {
+function isDeliverableUserEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  if (!looksLikeEmail(email)) return false;
+  if (email.endsWith("@phone.agrovibes")) return false;
+  return email;
+}
+
+async function emailUser({ to, subject, text }) {
+  const address = isDeliverableUserEmail(to);
+  if (!address) return false;
+  try {
+    const sent = await sendResendEmail({ to: address, subject, text });
+    if (sent) return true;
+  } catch (error) {
+    console.warn("[kyc] resend to applicant failed:", error?.message || error);
+  }
+  const formBody = new URLSearchParams({
+    name: "CropVibe",
+    email: "noreply@cropvibe.com",
+    _subject: subject,
+    message: text,
+    _template: "table",
+    _captcha: "false",
+    _honey: ""
+  });
+  const formResp = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(address)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json"
+    },
+    body: formBody
+  });
+  if (!formResp.ok) return false;
+  return true;
+}
+
+async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role, details = {}) {
   await ensureSocialNotificationsTable();
+  const name = String(applicantName || "A provider").trim() || "A provider";
+  const roleLabel = String(role || "provider").trim() || "provider";
+  const excerpt = `${name} submitted provider KYC and is waiting for review.`;
   const admins = await query(
     `
     SELECT id
@@ -632,12 +677,6 @@ async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role)
     LIMIT 50
     `
   );
-  const excerpt = JSON.stringify({
-    kind: "provider_kyc",
-    submissionId,
-    applicantName: String(applicantName || "").slice(0, 120),
-    role: String(role || "rental")
-  });
   for (const admin of admins.rows) {
     if (Number(admin.id) === Number(actorId)) continue;
     await query(
@@ -649,14 +688,85 @@ async function notifyAdminUsersOfKyc(actorId, submissionId, applicantName, role)
     );
     fireSocialPush({
       userId: admin.id,
-      title: "New KYC submission",
-      body: `${applicantName || "A provider"} submitted KYC for ${role || "provider"} approval.`,
-      data: {
-        type: "provider_kyc_submitted",
-        submissionId: String(submissionId)
-      }
+      type: "provider_kyc_submitted",
+      actorName: name,
+      commentExcerpt: excerpt
     });
   }
+  try {
+    const adminUrl = String(process.env.ADMIN_APP_ORIGIN || "https://admin.cropvibe.com").replace(/\/$/, "");
+    const reply = isDeliverableUserEmail(details.email) || undefined;
+    const subject = `New provider KYC: ${name}`;
+    const text = [
+      "A user finished KYC and is waiting for admin verification.",
+      "",
+      `Name: ${name}`,
+      `Role: ${roleLabel}`,
+      `Phone: ${String(details.phone || "").trim() || "-"}`,
+      `Email: ${reply || "-"}`,
+      `Submission: #${submissionId}`,
+      "",
+      `Review it in KYC Verification: ${adminUrl}/kyc-verification`
+    ].join("\n");
+    let sent = false;
+    try {
+      sent = await sendResendEmail({
+        to: "info@cropvibe.com",
+        subject,
+        text,
+        replyTo: reply
+      });
+    } catch (error) {
+      console.warn("[kyc] admin resend failed:", error?.message || error);
+    }
+    if (!sent) {
+      await emailUser({ to: "info@cropvibe.com", subject, text });
+    }
+  } catch (error) {
+    console.warn("[kyc] admin email failed:", error?.message || error);
+  }
+}
+
+async function notifyApplicantOfKycDecision({ userId, submissionId, status, adminNote }) {
+  const approved = status === "approved";
+  const message = approved
+    ? "Admin approved your provider registration. You can add listings now."
+    : "Admin rejected your provider registration. Review the details and submit again.";
+  const kycRes = await query(
+    `
+    SELECT applicant_name AS "applicantName", email
+    FROM provider_kyc_submissions
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [submissionId]
+  );
+  const person = kycRes.rows[0] || {};
+  const to = isDeliverableUserEmail(person.email);
+  const name = String(person.applicantName || "there").trim() || "there";
+  const note = String(adminNote || "").trim();
+  if (to) {
+    try {
+      await emailUser({
+        to,
+        subject: approved
+          ? "Your CropVibe provider application was approved"
+          : "Your CropVibe provider application was rejected",
+        text: approved
+          ? `Hello ${name},\n\nAdmin approved your provider registration. Open CropVibe and start adding your listings.\n`
+          : `Hello ${name},\n\nAdmin rejected your provider registration.${note ? `\n\nNote: ${note}` : ""}\n\nOpen Join as Provider in CropVibe to review and submit again.\n`
+      });
+    } catch (error) {
+      console.warn("[kyc] applicant email failed:", error?.message || error);
+    }
+  }
+  fireSocialPush({
+    userId,
+    type: approved ? "provider_kyc_approved" : "provider_kyc_rejected",
+    actorName: "CropVibe",
+    commentExcerpt: message
+  });
+  return message;
 }
 
 function liveScheduleExcerpt(topic, scheduledAt) {
@@ -1600,8 +1710,10 @@ function allowDevOtpFallback() {
 
 function otpProvider() {
   const configured = String(process.env.OTP_PROVIDER || "").trim().toLowerCase();
-  if (configured === "msg91") return "msg91";
-  if (configured === "twilio" || isTwilioVerifyConfigured()) return "twilio";
+  if (configured === "twilio" && isTwilioVerifyConfigured()) return "twilio";
+  if (configured === "msg91" || isMsg91WidgetConfigured()) return "msg91";
+  if (isTwilioVerifyConfigured()) return "twilio";
+  if (configured === "twilio") return "twilio";
   return "msg91";
 }
 
@@ -1625,17 +1737,45 @@ function staticOtpCode() {
   return "525252";
 }
 
+function msg91EnvValue(...names) {
+  for (const name of names) {
+    const value = String(process.env[name] || "").trim().replace(/^['"]|['"]$/g, "");
+    if (value) return value;
+  }
+  return "";
+}
+
+function msg91AuthKey() {
+  return msg91EnvValue("MSG91_AUTH_KEY", "MSG91_AUTHKEY");
+}
+
+function msg91WidgetId() {
+  return msg91EnvValue("MSG91_WIDGET_ID", "MSG91_WIDGETID");
+}
+
+function msg91WidgetToken() {
+  return msg91EnvValue("MSG91_WIDGET_TOKEN", "MSG91_TOKEN_AUTH");
+}
+
+function isMsg91WidgetConfigured() {
+  return Boolean(msg91AuthKey() && msg91WidgetId());
+}
+
 function isStaticOtpEnabled() {
   const disabled = String(process.env.STATIC_OTP_DISABLED || "").trim().toLowerCase();
   if (disabled === "true" || disabled === "1" || disabled === "yes") return false;
   // Twilio Verify takes over as soon as SID + token + service are present.
   if (isTwilioVerifyConfigured()) return false;
+  // A configured MSG91 widget sends a real OTP. Do not accept the static code instead.
+  if (isMsg91WidgetConfigured()) return false;
   return true;
 }
 
 function msg91Mode() {
   const mode = String(process.env.MSG91_API_MODE || "").trim().toLowerCase();
-  return mode === "widget" ? "widget" : "sendotp";
+  if (mode === "sendotp") return "sendotp";
+  if (mode === "widget" || isMsg91WidgetConfigured()) return "widget";
+  return "sendotp";
 }
 
 function matchesStaticOtp(code) {
@@ -1736,14 +1876,123 @@ async function verifyTwilioOtp(phone, code) {
   return String(payload?.status || "").toLowerCase() === "approved";
 }
 
-async function sendSmsOtp(phone, otp) {
-  const authKey = String(process.env.MSG91_AUTH_KEY || "").trim();
+async function verifyMsg91AccessToken(accessToken) {
+  const authKey = msg91AuthKey();
+  if (!authKey || !accessToken) return "";
+  const response = await fetch("https://control.msg91.com/api/v5/widget/verifyAccessToken", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json", authkey: authKey },
+    body: JSON.stringify({ "access-token": accessToken })
+  });
+  const payload = await response.json().catch(() => null);
+  const type = String(payload?.type || "").toLowerCase();
+  if (!response.ok || type === "error") {
+    throw new Error(String(payload?.message || "MSG91 did not accept this OTP."));
+  }
+  return String(payload?.message || "");
+}
+
+async function verifyMsg91WidgetOtp(reqId, code) {
+  const authKey = msg91AuthKey();
+  const widgetId = msg91WidgetId();
+  const tokenAuth = msg91WidgetToken();
+  if ((!authKey && !tokenAuth) || !widgetId || !reqId) return false;
+  const response = await fetch("https://control.msg91.com/api/v5/widget/verifyOtp", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(authKey ? { authkey: authKey } : {}) },
+    body: JSON.stringify({
+      widgetId,
+      reqId: String(reqId),
+      otp: String(code),
+      ...(tokenAuth ? { tokenAuth } : {})
+    })
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) return false;
+  const type = String(payload?.type || payload?.status || "success").toLowerCase();
+  return type === "success";
+}
+
+function msg91SendError(payload, fallback) {
+  const message = String(payload?.message || payload?.error || payload?.errors?.[0]?.message || fallback || "Failed to send OTP");
+  const code = String(payload?.code || "");
+  if (/invalid request/i.test(message)) {
+    return "MSG91 blocked this OTP. In the OTP widget, set Country-wise restriction to Allow all. On the auth key, turn off IP security or allow the CropVibe server IP.";
+  }
+  if (/authentication|authkey|ip/i.test(message) || code === "201") {
+    return "MSG91 rejected the auth key. Check MSG91_AUTH_KEY, and allow the CropVibe server IP on that key.";
+  }
+  return message;
+}
+
+async function postMsg91Widget(url, { authKey, body }) {
+  const headers = { "Content-Type": "application/json", Accept: "application/json" };
+  if (authKey) headers.authkey = authKey;
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body)
+  });
+  const payload = await response.json().catch(() => null);
+  return { response, payload };
+}
+
+function msg91WidgetRequestId(payload) {
+  const resultType = String(payload?.type || "").toLowerCase();
+  return {
+    resultType,
+    providerRequestId: String(
+      payload?.reqId || payload?.request_id || payload?.requestId || (resultType === "success" ? payload?.message : "") || ""
+    )
+  };
+}
+
+async function sendMsg91WidgetOtp(phone, authKey, widgetId) {
+  const identifier = phoneDigitsOnly(phone);
+  const tokenAuth = msg91WidgetToken();
+  // sendOtp is a web request. This widget rejects it with
+  // "Web requests are not allowed for this widget." sendOtpMobile uses the widget token.
+  const attempts = [];
+  if (tokenAuth) {
+    attempts.push({
+      url: "https://control.msg91.com/api/v5/widget/sendOtpMobile",
+      authKey: "",
+      body: { widgetId, tokenAuth, identifier }
+    });
+  }
+  attempts.push({
+    url: "https://control.msg91.com/api/v5/widget/sendOtp",
+    authKey,
+    body: { widgetId, identifier }
+  });
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    const { response, payload } = await postMsg91Widget(attempt.url, attempt);
+    const { resultType, providerRequestId } = msg91WidgetRequestId(payload);
+    if (response.ok && resultType !== "error" && providerRequestId) {
+      return {
+        channel: "sms",
+        providerRequestId,
+        providerStatus: String(payload?.type || payload?.status || "accepted"),
+        providerMessage: "OTP sent"
+      };
+    }
+    const message = msg91SendError(payload, "Failed to send OTP");
+    lastError = new Error(message);
+    if (!/web requests are not allowed/i.test(message)) break;
+  }
+  throw lastError || new Error("Failed to send OTP");
+}
+
+async function sendSmsOtp(phone, otp, options = {}) {
+  const authKey = msg91AuthKey();
   const templateId = String(process.env.MSG91_TEMPLATE_ID || "").trim();
   const senderId = String(process.env.MSG91_SENDER_ID || "").trim();
   const msg91FlowId = String(process.env.MSG91_FLOW_ID || "").trim();
-  const widgetId = String(process.env.MSG91_WIDGET_ID || "").trim();
+  const widgetId = msg91WidgetId();
   const digitsPhone = phoneDigitsOnly(phone);
-  const mode = msg91Mode();
+  const mode = options.forceWidget ? "widget" : msg91Mode();
 
   if (!authKey || (mode === "sendotp" && !templateId) || (mode === "widget" && !widgetId)) {
     if (allowDevOtpFallback()) {
@@ -1760,16 +2009,9 @@ async function sendSmsOtp(phone, otp) {
   }
 
   try {
-    const url = mode === "widget" ? "https://api.msg91.com/api/v5/widget/sendOtp" : "https://api.msg91.com/api/v5/otp";
-    const requestPayload =
-      mode === "widget"
-        ? {
-            widgetId,
-            tokenAuth: authKey,
-            identifier: digitsPhone,
-            ...(otp ? { otp } : {})
-          }
-        : {
+    if (mode === "widget") return await sendMsg91WidgetOtp(phone, authKey, widgetId);
+    const url = "https://api.msg91.com/api/v5/otp";
+    const requestPayload = {
             template_id: templateId,
             mobile: digitsPhone,
             otp,
@@ -1778,25 +2020,32 @@ async function sendSmsOtp(phone, otp) {
           };
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(mode === "widget" ? { token: authKey } : { authkey: authKey })
-      },
+      headers: { "Content-Type": "application/json", authkey: authKey },
       body: JSON.stringify(requestPayload)
     });
     const payload = await response.json().catch(() => null);
-    if (!response.ok) {
+    const resultType = String(payload?.type || "").toLowerCase();
+    if (!response.ok || resultType === "error") {
       const message =
         payload?.message ||
         payload?.error ||
         payload?.errors?.[0]?.message ||
-        payload?.type ||
         "Failed to send OTP";
       throw new Error(message);
     }
+    const providerRequestId = String(
+      payload?.reqId ||
+        payload?.request_id ||
+        payload?.requestId ||
+        (mode === "widget" && resultType === "success" ? payload?.message : "") ||
+        ""
+    );
+    if (mode === "widget" && !providerRequestId) {
+      throw new Error(payload?.message || "MSG91 did not return an OTP request id.");
+    }
     return {
       channel: "sms",
-      providerRequestId: String(payload?.request_id || payload?.requestId || payload?.reqId || ""),
+      providerRequestId,
       providerStatus: String(payload?.type || payload?.status || "accepted"),
       providerMessage: String(payload?.message || payload?.details || "")
     };
@@ -3479,6 +3728,35 @@ router.post("/v1/auth/register", async (req, res) => {
       return;
     }
 
+    const existing = await query(
+      `
+      SELECT ${authUserSelect}, password_hash AS "passwordHash"
+      FROM learn_users
+      WHERE phone = $1
+         OR RIGHT(REGEXP_REPLACE(COALESCE(phone, ''), '[^0-9]', '', 'g'), 10) = $2
+         OR LOWER(TRIM(email)) = $2
+         OR LOWER(TRIM(email)) = $3
+      LIMIT 1
+      `,
+      [normalizedPhone, phoneDigits, `${phoneDigits}@phone.agrovibes`]
+    );
+    const existingRow = existing.rows[0];
+    if (existingRow) {
+      if (String(existingRow.accountStatus || "active").toLowerCase() === "deleted") {
+        res.status(403).json({ message: "This account was deleted. Please create a new account." });
+        return;
+      }
+      const samePassword = await bcrypt.compare(String(password), String(existingRow.passwordHash));
+      if (!samePassword) {
+        res.status(409).json({ message: "This mobile number is already registered. Log in with the same password." });
+        return;
+      }
+      const user = authUserFromRow(existingRow);
+      const token = await issueAuthToken(user, req, req.body?.deviceInfo || req.body);
+      res.json({ token, user });
+      return;
+    }
+
     const passwordHash = await bcrypt.hash(String(password), 10);
     const result = await query(
       `
@@ -3604,9 +3882,30 @@ router.post("/v1/auth/login", async (req, res) => {
       res.status(401).json({ message: "Invalid credentials" });
       return;
     }
-    if (String(userRow.accountStatus || "active").toLowerCase() === "deleted") {
+    const loginStatus = String(userRow.accountStatus || "active").toLowerCase();
+    if (loginStatus === "deleted") {
       res.status(403).json({ message: "This account was deleted. Please create a new account." });
       return;
+    }
+    if (loginStatus === "banned") {
+      res.status(403).json({ message: "This account is banned." });
+      return;
+    }
+    if (loginStatus === "suspended") {
+      const untilResult = await query(
+        `SELECT moderation_until AS "moderationUntil" FROM learn_users WHERE id = $1 LIMIT 1`,
+        [userRow.id]
+      );
+      const until = untilResult.rows[0]?.moderationUntil;
+      if (until && new Date(until).getTime() <= Date.now()) {
+        await query(
+          `UPDATE learn_users SET account_status = 'active', moderation_reason = NULL, moderation_until = NULL WHERE id = $1`,
+          [userRow.id]
+        );
+      } else {
+        res.status(403).json({ message: "This account is suspended." });
+        return;
+      }
     }
 
     const user = authUserFromRow(userRow);
@@ -3654,12 +3953,17 @@ router.post("/v1/auth/phone/send-otp", async (req, res) => {
   try {
     const provider = otpProvider();
     const phone = normalizeIndiaPhone(req.body?.phone);
+    const providerOtp = String(req.body?.purpose || "").trim().toLowerCase() === "provider";
     if (!phone) {
       res.status(400).json({ message: "Enter a valid phone number" });
       return;
     }
+    if (providerOtp && !isMsg91WidgetConfigured()) {
+      res.status(503).json({ message: "MSG91 widget OTP is not configured on this server." });
+      return;
+    }
 
-    if (isStaticOtpEnabled()) {
+    if (isStaticOtpEnabled() && !providerOtp) {
       res.json({
         success: true,
         phone,
@@ -3695,9 +3999,14 @@ router.post("/v1/auth/phone/send-otp", async (req, res) => {
       return;
     }
 
-    const otp = provider === "twilio" ? "" : randomOtp6();
-    const otpHash = hashOtp(phone, otp || `twilio:${Date.now()}`);
-    const sent = provider === "twilio" ? await sendTwilioVerifyOtp(phone) : await sendSmsOtp(phone, otp);
+    const useMsg91Widget = providerOtp || (provider !== "twilio" && msg91Mode() === "widget");
+    const otp = useMsg91Widget || provider === "twilio" ? "" : randomOtp6();
+    const otpHash = hashOtp(phone, otp || `${useMsg91Widget ? "msg91" : "twilio"}:${Date.now()}`);
+    const sent = useMsg91Widget
+      ? await sendSmsOtp(phone, "", { forceWidget: true })
+      : provider === "twilio"
+        ? await sendTwilioVerifyOtp(phone)
+        : await sendSmsOtp(phone, otp);
 
     try {
       await query(
@@ -3739,7 +4048,7 @@ router.post("/v1/auth/phone/send-otp", async (req, res) => {
       });
       return;
     }
-    res.status(500).json({ message: "Failed to send OTP", error: errorMessage || String(error) });
+    res.status(502).json({ message: errorMessage || "Failed to send OTP" });
   }
 });
 
@@ -3795,28 +4104,10 @@ router.post("/v1/auth/phone/verify-otp", async (req, res) => {
     let isValidOtp = false;
     if (isStaticOtp) {
       isValidOtp = true;
+    } else if (msg91Mode() === "widget" && otpRow?.providerRequestId) {
+      isValidOtp = await verifyMsg91WidgetOtp(otpRow.providerRequestId, code);
     } else if (provider === "twilio") {
       isValidOtp = await verifyTwilioOtp(phone, code);
-    } else if (msg91Mode() === "widget" && otpRow?.providerRequestId) {
-      const authKey = String(process.env.MSG91_AUTH_KEY || "").trim();
-      const widgetId = String(process.env.MSG91_WIDGET_ID || "").trim();
-      try {
-        const verifyResponse = await fetch("https://api.msg91.com/api/v5/widget/verifyOtp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", token: authKey },
-          body: JSON.stringify({
-            widgetId,
-            tokenAuth: authKey,
-            reqId: otpRow.providerRequestId,
-            otp: code
-          })
-        });
-        if (verifyResponse.ok) {
-          isValidOtp = true;
-        }
-      } catch (_e) {
-        isValidOtp = false;
-      }
     } else {
       const otpHash = hashOtp(phone, code);
       isValidOtp = otpHash === otpRow.otpHash;
@@ -3978,26 +4269,10 @@ router.post("/v1/auth/phone/reset-password", async (req, res) => {
     }
 
     let isValidOtp = false;
-    if (provider === "twilio") {
+    if (msg91Mode() === "widget" && otpRow?.providerRequestId) {
+      isValidOtp = await verifyMsg91WidgetOtp(otpRow.providerRequestId, code);
+    } else if (provider === "twilio") {
       isValidOtp = await verifyTwilioOtp(phone, code);
-    } else if (msg91Mode() === "widget" && otpRow?.providerRequestId) {
-      const authKey = String(process.env.MSG91_AUTH_KEY || "").trim();
-      const widgetId = String(process.env.MSG91_WIDGET_ID || "").trim();
-      try {
-        const verifyResponse = await fetch("https://api.msg91.com/api/v5/widget/verifyOtp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", token: authKey },
-          body: JSON.stringify({
-            widgetId,
-            tokenAuth: authKey,
-            reqId: otpRow.providerRequestId,
-            otp: code
-          })
-        });
-        isValidOtp = verifyResponse.ok;
-      } catch (_e) {
-        isValidOtp = false;
-      }
     } else {
       const otpHash = hashOtp(phone, code);
       isValidOtp = otpRow && otpHash === otpRow.otpHash;
@@ -4032,6 +4307,44 @@ router.post("/v1/auth/phone/reset-password", async (req, res) => {
     console.error("reset-password failed", error);
     res.status(500).json({ message: "Failed to reset password", error: error?.message || String(error) });
   }
+});
+
+const { listStates, listDistricts, listCities } = require("../indiaLocations");
+const { lookupPostalPin } = require("../postalPin");
+
+router.get("/v1/locations/states", (_req, res) => {
+  res.json({ states: listStates() });
+});
+
+router.get("/v1/locations/districts", (req, res) => {
+  const state = String(req.query.state || "").trim();
+  if (!state) {
+    res.status(400).json({ message: "Choose a state first." });
+    return;
+  }
+  res.json({ districts: listDistricts(state) });
+});
+
+router.get("/v1/locations/cities", (req, res) => {
+  const state = String(req.query.state || "").trim();
+  const district = String(req.query.district || "").trim();
+  if (!state || !district) {
+    res.status(400).json({ message: "Choose a state and district first." });
+    return;
+  }
+  res.json({ cities: listCities(state, district) });
+});
+
+router.get("/v1/locations/pincode", async (req, res) => {
+  const state = String(req.query.state || "").trim();
+  const district = String(req.query.district || "").trim();
+  const city = String(req.query.city || "").trim();
+  if (!state || !district || !city) {
+    res.status(400).json({ message: "Choose a state, district, and city first." });
+    return;
+  }
+  const pinCode = await lookupPostalPin({ state, district, city });
+  res.json({ pinCode });
 });
 
 router.get("/v1/places/maps-config", authRequired, mapsConfigHandler);
@@ -4312,6 +4625,7 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
     await ensureHomePostsTable();
     await ensureSocialFollowsTable();
     await ensureDirectMessagesTable();
+    await ensureProviderKycTable();
 
     const limitRaw = Number(req.query.limit || 100);
     const offsetRaw = Number(req.query.offset || 0);
@@ -4333,7 +4647,14 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
         u.bio,
         u.website,
         u.location_label AS "locationLabel",
+        u.account_status AS "accountStatus",
+        u.moderation_reason AS "moderationReason",
+        u.moderation_until AS "moderationUntil",
         u.created_at AS "createdAt",
+        kyc.status AS "kycStatus",
+        kyc.document_summary AS "kycSummary",
+        kyc.address AS "kycAddress",
+        aadhaar.aadhaar_last4 AS "aadhaarLast4",
         COUNT(*) OVER()::INT AS "totalCount",
         COALESCE(posts.posts_count, 0)::INT AS "postsCount",
         COALESCE(posts.reels_count, 0)::INT AS "reelsCount",
@@ -4379,6 +4700,19 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
         FROM direct_messages dm
         WHERE dm.receiver_id = u.id
       ) received ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT k.status, k.document_summary, k.address
+        FROM provider_kyc_submissions k
+        WHERE k.user_id = u.id
+        ORDER BY k.created_at DESC
+        LIMIT 1
+      ) kyc ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT c.aadhaar_last4
+        FROM provider_kyc_phone_checks c
+        WHERE c.user_id = u.id
+        LIMIT 1
+      ) aadhaar ON TRUE
       WHERE (
         $1::TEXT = ''
         OR LOWER(COALESCE(u.full_name, '')) LIKE $2
@@ -4397,6 +4731,64 @@ router.get("/v1/admin/users", authRequired, requireRole("admin"), async (req, re
     res.json({ users, total, limit, offset });
   } catch (error) {
     res.status(500).json({ message: "Failed to list users", error: error.message });
+  }
+});
+
+router.post("/v1/admin/users/:id/moderation", authRequired, requireRole("admin"), async (req, res) => {
+  try {
+    await ensureLearnUsersTable();
+    const userId = Number(req.params.id);
+    const action = String(req.body?.action || "").trim().toLowerCase();
+    const reason = String(req.body?.reason || "").trim();
+    const untilRaw = String(req.body?.until || "").trim();
+    if (!Number.isFinite(userId) || userId <= 0) {
+      res.status(400).json({ message: "Invalid user" });
+      return;
+    }
+    if (!["suspend", "ban", "restore"].includes(action)) {
+      res.status(400).json({ message: "Invalid action" });
+      return;
+    }
+    if (action !== "restore" && reason.length < 3) {
+      res.status(400).json({ message: "A reason is required" });
+      return;
+    }
+
+    let status = "active";
+    let until = null;
+    if (action === "suspend") {
+      status = "suspended";
+      if (untilRaw) {
+        const untilDate = new Date(untilRaw);
+        if (Number.isNaN(untilDate.getTime()) || untilDate.getTime() <= Date.now()) {
+          res.status(400).json({ message: "Choose a future end date" });
+          return;
+        }
+        until = untilDate.toISOString();
+      }
+    } else if (action === "ban") {
+      status = "banned";
+    }
+
+    const result = await query(
+      `
+      UPDATE learn_users
+      SET account_status = $2,
+          moderation_reason = $3,
+          moderation_until = $4
+      WHERE id = $1
+        AND role <> 'admin'
+      RETURNING id, account_status AS "accountStatus", moderation_reason AS "moderationReason", moderation_until AS "moderationUntil"
+      `,
+      [userId, status, action === "restore" ? null : reason, until]
+    );
+    if (!result.rows[0]) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+    res.json({ success: true, ...result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update user", error: error.message });
   }
 });
 
@@ -5531,6 +5923,12 @@ router.get("/v1/social/notifications", authRequired, async (req, res) => {
         r.type === "live_host_reminder"
     );
     const weatherAlerts = result.rows.filter((r) => r.type === "weather_alert");
+    const providerUpdates = result.rows.filter(
+      (r) =>
+        r.type === "provider_kyc_submitted" ||
+        r.type === "provider_kyc_approved" ||
+        r.type === "provider_kyc_rejected"
+    );
     // Expire abandoned live_start posts so notifications don't keep showing "Join live".
     const staleLivePostIds = [];
     for (const row of liveStarts) {
@@ -5569,7 +5967,10 @@ router.get("/v1/social/notifications", authRequired, async (req, res) => {
         r.type === "live_scheduled" ||
         r.type === "live_reminder" ||
         r.type === "live_host_reminder" ||
-        r.type === "weather_alert"
+        r.type === "weather_alert" ||
+        r.type === "provider_kyc_submitted" ||
+        r.type === "provider_kyc_approved" ||
+        r.type === "provider_kyc_rejected"
       );
     }).length;
     res.json({
@@ -5580,6 +5981,7 @@ router.get("/v1/social/notifications", authRequired, async (req, res) => {
       postComments,
       liveStarts,
       weatherAlerts,
+      providerUpdates,
       unreadCount
     });
   } catch (error) {
@@ -6362,33 +6764,35 @@ router.delete("/v1/messages/:messageId", authRequired, async (req, res) => {
   }
 });
 
+const MARKETPLACE_LISTINGS_CACHE_KEY = "v1:marketplace:listings";
+
 router.get("/v1/marketplace/listings", async (_req, res) => {
   try {
-    const cacheKey = "v1:marketplace:listings";
-    const cached = await cacheGetJson(cacheKey);
-    if (cached && Array.isArray(cached.listings)) {
-      res.json(cached);
-      return;
-    }
+    await cacheDel(MARKETPLACE_LISTINGS_CACHE_KEY);
+    await ensureProviderListingsTable();
     const result = await query(
       `
       SELECT
         l.id,
-        l.crop_name AS "cropName",
-        COALESCE(d.name, 'Unknown') AS district,
-        l.price_per_kg AS "pricePerKg",
-        l.verified_only AS "verifiedOnly",
-        'produce' AS "listingType"
-      FROM listings l
-      LEFT JOIN districts d ON d.id = l.district_id
+        l.title AS "cropName",
+        COALESCE(NULLIF(u.full_name, ''), NULLIF(l.category, ''), l.channel, 'Provider') AS district,
+        COALESCE(l.daily_rate, 0)::numeric AS "pricePerKg",
+        true AS "verifiedOnly",
+        CASE
+          WHEN lower(COALESCE(l.channel, '')) IN ('services', 'service') THEN 'services'
+          WHEN lower(COALESCE(l.channel, '')) IN ('educators', 'education') THEN 'knowledge'
+          WHEN lower(COALESCE(l.channel, '')) = 'rental' THEN 'machinery'
+          ELSE 'produce'
+        END AS "listingType"
+      FROM provider_listings l
+      LEFT JOIN learn_users u ON u.id = l.user_id
+      WHERE lower(COALESCE(l.status, '')) = 'approved'
       ORDER BY l.created_at DESC
-      LIMIT 30
+      LIMIT 100
       `
     );
 
-    const body = { listings: result.rows };
-    res.json(body);
-    await cacheSetJson(cacheKey, body, 90);
+    res.json({ listings: result.rows });
   } catch (error) {
     res.json({
       listings: [],
@@ -10667,6 +11071,200 @@ try {
 </html>`);
 });
 
+<<<<<<< HEAD
+=======
+router.get("/v1/provider/phone/widget", authRequired, async (req, res) => {
+  const widgetId = msg91WidgetId();
+  const tokenAuth = msg91WidgetToken();
+  if (!widgetId || !tokenAuth) {
+    res.status(503).json({
+      message: "Add MSG91_WIDGET_ID and MSG91_WIDGET_TOKEN on the server. Use the OTP widget token, not the account auth key."
+    });
+    return;
+  }
+  res.json({ widgetId, tokenAuth });
+});
+
+router.post("/v1/provider/phone/send", authRequired, async (req, res) => {
+  try {
+    if (!isMsg91WidgetConfigured()) {
+      res.status(503).json({ message: "MSG91 widget OTP is not configured on this server." });
+      return;
+    }
+    const phone = normalizeIndiaPhone(req.body?.phone);
+    if (!phone) {
+      res.status(400).json({ message: "Enter a valid phone number" });
+      return;
+    }
+    const sent = await sendSmsOtp(phone, "", { forceWidget: true });
+    await ensurePhoneOtpTable();
+    await query(
+      `
+      INSERT INTO phone_otp_codes (phone, otp_hash, expires_at, attempts, used, channel, provider_request_id, provider_status, provider_message)
+      VALUES ($1, $2, NOW() + INTERVAL '10 minutes', 0, false, $3, $4, $5, $6)
+      `,
+      [phone, hashOtp(phone, `msg91:${sent.providerRequestId}`), sent.channel, sent.providerRequestId || null, sent.providerStatus || null, sent.providerMessage || null]
+    );
+    res.json({ success: true, phone, provider: "msg91", channel: sent.channel });
+  } catch (error) {
+    res.status(502).json({ message: error?.message || "Could not send the OTP" });
+  }
+});
+
+router.post("/v1/provider/phone/confirm", authRequired, async (req, res) => {
+  try {
+    const phone = normalizeIndiaPhone(req.body?.phone);
+    const code = String(req.body?.code || "").replace(/\D/g, "");
+    const accessToken = String(req.body?.accessToken || "").trim();
+    if (!phone || (!accessToken && code.length !== 6)) {
+      res.status(400).json({ message: "Phone and 6-digit OTP are required" });
+      return;
+    }
+    let accepted = false;
+    let otpRowId = null;
+    if (accessToken) {
+      const verifiedIdentifier = await verifyMsg91AccessToken(accessToken);
+      accepted = phoneDigitsOnly(verifiedIdentifier).slice(-10) === phoneDigitsOnly(phone).slice(-10);
+    } else if (isMsg91WidgetConfigured()) {
+      await ensurePhoneOtpTable();
+      const otpRows = await query(
+        `
+        SELECT id, provider_request_id AS "providerRequestId"
+        FROM phone_otp_codes
+        WHERE phone = $1 AND used = false AND expires_at > NOW() AND COALESCE(channel, 'sms') <> 'kyc'
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [phone]
+      );
+      const row = otpRows.rows[0];
+      accepted = Boolean(row?.providerRequestId) && (await verifyMsg91WidgetOtp(row.providerRequestId, code));
+      if (accepted) otpRowId = row.id;
+    } else if (matchesStaticOtp(code)) {
+      accepted = true;
+    } else if (otpProvider() === "twilio") {
+      accepted = await verifyTwilioOtp(phone, code);
+    } else {
+      await ensurePhoneOtpTable();
+      const otpRows = await query(
+        `
+        SELECT id, otp_hash AS "otpHash"
+        FROM phone_otp_codes
+        WHERE phone = $1 AND used = false AND expires_at > NOW() AND COALESCE(channel, 'sms') <> 'kyc'
+        ORDER BY created_at DESC
+        LIMIT 1
+        `,
+        [phone]
+      );
+      const row = otpRows.rows[0];
+      accepted = Boolean(row && hashOtp(phone, code) === row.otpHash);
+      if (accepted) otpRowId = row.id;
+    }
+    if (accepted && otpRowId) await query(`UPDATE phone_otp_codes SET used = true WHERE id = $1`, [otpRowId]);
+    if (!accepted) {
+      res.status(400).json({ message: "That OTP is not correct." });
+      return;
+    }
+    await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS provider_phone TEXT`);
+    await query(`ALTER TABLE learn_users ADD COLUMN IF NOT EXISTS provider_phone_verified_at TIMESTAMPTZ`);
+    await query(
+      `UPDATE learn_users SET provider_phone = $2, provider_phone_verified_at = NOW() WHERE id = $1`,
+      [req.user.userId, phone]
+    );
+    res.json({ verified: true });
+  } catch (error) {
+    const detail = String(error?.message || "");
+    const safe = detail.length > 0 && !/sql|syntax|relation|column/i.test(detail);
+    res.status(safe ? 400 : 500).json({ message: safe ? detail : "Could not verify the OTP" });
+  }
+});
+
+router.post("/v1/provider/payouts/razorpay", authRequired, async (req, res) => {
+  try {
+    const holderName = String(req.body?.holderName || "").trim();
+    const accountNumber = String(req.body?.accountNumber || "").replace(/\D/g, "");
+    const ifsc = String(req.body?.ifsc || "").trim().toUpperCase();
+    const email = String(req.body?.email || req.user?.email || "").trim();
+    const phone = String(req.body?.phone || req.user?.phone || "").replace(/\D/g, "").slice(-10);
+    const businessName = String(req.body?.businessName || holderName).trim();
+    const street = String(req.body?.street || "").trim().slice(0, 120);
+    const city = String(req.body?.city || "").trim().slice(0, 60);
+    const stateName = String(req.body?.state || "").trim().toUpperCase().slice(0, 40);
+    const postalCode = String(req.body?.postalCode || "").replace(/\D/g, "").slice(0, 6);
+    if (holderName.length < 2 || accountNumber.length < 6 || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+      res.status(400).json({ message: "Account number, IFSC, and account holder name are required." });
+      return;
+    }
+    if (phone.length !== 10 || !email.includes("@")) {
+      res.status(400).json({ message: "A mobile number and email are required before linking Razorpay." });
+      return;
+    }
+    if (!street || !city || !stateName || postalCode.length !== 6) {
+      res.status(400).json({ message: "Street, city, state, and a 6-digit PIN code are required for the Razorpay account." });
+      return;
+    }
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keyId || !keySecret) {
+      res.status(503).json({ message: "Razorpay is not configured on this server yet." });
+      return;
+    }
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+    const headers = { Authorization: `Basic ${auth}`, "Content-Type": "application/json" };
+    const response = await fetch("https://api.razorpay.com/v2/accounts", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        email,
+        phone,
+        legal_business_name: businessName,
+        customer_facing_business_name: businessName,
+        business_type: "individual",
+        contact_name: holderName,
+        profile: {
+          category: "ecommerce",
+          subcategory: "ecommerce_marketplace",
+          addresses: {
+            registered: { street1: street, city, state: stateName, postal_code: postalCode, country: "IN" }
+          }
+        }
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.id) {
+      res.status(502).json({ message: payload?.error?.description || "Razorpay could not create the linked account." });
+      return;
+    }
+    const productResponse = await fetch(`https://api.razorpay.com/v2/accounts/${payload.id}/products`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ product_name: "route", tnc_accepted: true })
+    });
+    const product = await productResponse.json().catch(() => ({}));
+    if (!productResponse.ok || !product.id) {
+      res.status(502).json({ message: product?.error?.description || "Razorpay did not enable Route for this account." });
+      return;
+    }
+    const settlementResponse = await fetch(`https://api.razorpay.com/v2/accounts/${payload.id}/products/${product.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        settlements: { account_number: accountNumber, ifsc_code: ifsc, beneficiary_name: holderName },
+        tnc_accepted: true
+      })
+    });
+    const settlement = await settlementResponse.json().catch(() => ({}));
+    if (!settlementResponse.ok) {
+      res.status(502).json({ message: settlement?.error?.description || "Razorpay did not accept the bank account." });
+      return;
+    }
+    res.json({ linked: true, accountId: payload.id });
+  } catch (error) {
+    res.status(500).json({ message: "Could not set up Razorpay", error: error?.message || String(error) });
+  }
+});
+
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 router.post("/v1/provider/kyc/digilocker/start", authRequired, async (req, res) => {
   try {
     const userId = Number(req.user.userId);
@@ -10763,7 +11361,7 @@ async function queueVerifiedProviderApplication(req, userId, identity, bank) {
   );
   const submissionId = inserted.rows[0]?.id;
   try {
-    await notifyAdminUsersOfKyc(userId, submissionId, applicantName, role);
+    await notifyAdminUsersOfKyc(userId, submissionId, applicantName, role, { phone, email });
   } catch (notifyError) {
     console.warn("[kyc] admin notify failed:", notifyError?.message || notifyError);
   }
@@ -10953,23 +11551,7 @@ router.post("/v1/provider/kyc/verify-otp", authRequired, async (req, res) => {
         normalizeIndiaPhone(req.body?.notifyPhone);
       isValidOtp = smsPhone ? await verifyTwilioOtp(smsPhone, code) : false;
     } else if (msg91Mode() === "widget" && otpRow?.providerRequestId) {
-      const authKey = String(process.env.MSG91_AUTH_KEY || "").trim();
-      const widgetId = String(process.env.MSG91_WIDGET_ID || "").trim();
-      try {
-        const verifyResponse = await fetch("https://api.msg91.com/api/v5/widget/verifyOtp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", token: authKey },
-          body: JSON.stringify({
-            widgetId,
-            tokenAuth: authKey,
-            reqId: otpRow.providerRequestId,
-            otp: code
-          })
-        });
-        isValidOtp = verifyResponse.ok;
-      } catch (_e) {
-        isValidOtp = false;
-      }
+      isValidOtp = await verifyMsg91WidgetOtp(otpRow.providerRequestId, code);
     } else if (otpRow) {
       isValidOtp = hashOtp(otpKey, code) === otpRow.otpHash;
     }
@@ -11023,7 +11605,11 @@ router.post("/v1/provider/kyc/submit", authRequired, async (req, res) => {
       res.status(400).json({ message: "Enter a valid GST number" });
       return;
     }
-    const email = String(req.body?.email || "").trim().toLowerCase().slice(0, 160) || null;
+    const email = isDeliverableUserEmail(req.body?.email);
+    if (!email) {
+      res.status(400).json({ message: "Enter a valid email on the basic details form." });
+      return;
+    }
     const phone = normalizeIndiaPhone(req.body?.phone) || String(req.body?.phone || "").trim().slice(0, 40) || null;
     const otpVerified = req.body?.otpVerified === true;
     const address = String(req.body?.address || "").trim().slice(0, 400) || null;
@@ -11098,7 +11684,7 @@ router.post("/v1/provider/kyc/submit", authRequired, async (req, res) => {
 
     const row = inserted.rows[0];
     try {
-      await notifyAdminUsersOfKyc(userId, row.id, applicantName, role);
+      await notifyAdminUsersOfKyc(userId, row.id, applicantName, role, { phone, email });
     } catch (notifyError) {
       console.warn("[kyc] admin notify failed:", notifyError?.message || notifyError);
     }
@@ -11272,6 +11858,25 @@ async function ensureProviderListingsTable() {
     )
     `
   );
+<<<<<<< HEAD
+=======
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS rc_number TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS removal_reason TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS image_url TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS daily_rate NUMERIC`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS rate_unit TEXT`);
+}
+
+function listingMoney(value) {
+  const amount = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function listingImageUrl(value) {
+  const url = String(value || "").trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+  return url.slice(0, 500);
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
 }
 
 function adminListingCategory(channel) {
@@ -11299,18 +11904,62 @@ router.post("/v1/provider/listings", authRequired, async (req, res) => {
     const category = String(req.body?.category || "Equipment").trim().slice(0, 80) || "Equipment";
     const channelRaw = String(req.body?.channel || "Rental").trim();
     const channel = ["Store", "Rental", "Services", "Educators"].includes(channelRaw) ? channelRaw : "Rental";
+<<<<<<< HEAD
+=======
+    const imageUrl = listingImageUrl(req.body?.imageUrl);
+    const dailyRate = listingMoney(req.body?.dailyRate);
+    const rateUnit = String(req.body?.rateUnit || "").trim().slice(0, 40) || null;
+    let rcNumber = String(req.body?.rcNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16) || null;
+    if (rcNumber && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(rcNumber)) {
+      res.status(400).json({ message: "Enter the RC number in the vehicle registration format, such as TS09AB1234." });
+      return;
+    }
+    if (rcNumber) {
+      try {
+        const verified = await providerKycIdentity.verifyVehicleRc(rcNumber);
+        if (verified?.rcNumber) rcNumber = verified.rcNumber;
+      } catch (error) {
+        res.status(error.status || 422).json({ message: error.message || "Vehicle RC could not be verified." });
+        return;
+      }
+    }
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
     if (title.length < 2) {
       res.status(400).json({ message: "Enter the listing name." });
+      return;
+    }
+    await ensureProviderKycTable();
+    const approvedKyc = await query(
+      `
+      SELECT id
+      FROM provider_kyc_submissions
+      WHERE user_id = $1 AND status = 'approved'
+      LIMIT 1
+      `,
+      [userId]
+    );
+    if (!approvedKyc.rows[0]) {
+      res.status(403).json({
+        message: "Admin must approve your provider registration before you can add listings."
+      });
       return;
     }
     await ensureProviderListingsTable();
     const inserted = await query(
       `
+<<<<<<< HEAD
       INSERT INTO provider_listings (user_id, title, category, channel, status)
       VALUES ($1, $2, $3, $4, 'pending')
       RETURNING id, title, category, channel, status, created_at AS "createdAt"
       `,
       [userId, title, category, channel]
+=======
+      INSERT INTO provider_listings (user_id, title, category, channel, status, rc_number, image_url, daily_rate, rate_unit)
+      VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8)
+      RETURNING id, title, category, channel, status, rc_number AS "rcNumber", image_url AS "imageUrl", daily_rate AS "dailyRate", rate_unit AS "rateUnit", created_at AS "createdAt"
+      `,
+      [userId, title, category, channel, rcNumber, imageUrl, dailyRate, rateUnit]
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
     );
     res.status(201).json({ listing: inserted.rows[0] });
   } catch (error) {
@@ -11331,14 +11980,15 @@ router.get("/v1/rentals/listings", authOptional, async (req, res) => {
         l.category,
         l.channel,
         l.status,
+        l.image_url AS "imageUrl",
+        l.daily_rate AS "dailyRate",
+        l.rate_unit AS "rateUnit",
         l.created_at AS "createdAt",
         COALESCE(u.full_name, 'Provider') AS "providerName"
       FROM provider_listings l
       LEFT JOIN learn_users u ON u.id = l.user_id
-      WHERE l.channel IN ('Rental', 'Services')
-        AND l.status <> 'unpublished'
-        AND l.status <> 'rejected'
-        AND (l.status = 'approved' OR l.user_id = $1)
+      WHERE lower(COALESCE(l.status, '')) NOT IN ('unpublished', 'rejected')
+        AND (lower(COALESCE(l.status, '')) = 'approved' OR l.user_id = $1)
       ORDER BY l.created_at DESC
       LIMIT 100
       `,
@@ -11347,6 +11997,44 @@ router.get("/v1/rentals/listings", authOptional, async (req, res) => {
     res.json({ listings: result.rows });
   } catch (error) {
     res.status(500).json({ message: "Failed to load rentals", error: error?.message || String(error) });
+  }
+});
+
+router.patch("/v1/provider/listings/:id", authRequired, async (req, res) => {
+  try {
+    const userId = Number(req.user.userId);
+    const listingId = Number(req.params.id);
+    if (!Number.isFinite(userId) || userId <= 0 || !Number.isFinite(listingId) || listingId <= 0) {
+      res.status(400).json({ message: "Invalid listing" });
+      return;
+    }
+    const imageUrl = listingImageUrl(req.body?.imageUrl);
+    const dailyRate = listingMoney(req.body?.dailyRate);
+    const rateUnit = String(req.body?.rateUnit || "").trim().slice(0, 40) || null;
+    if (!imageUrl && !dailyRate && !rateUnit) {
+      res.status(400).json({ message: "Nothing to update" });
+      return;
+    }
+    await ensureProviderListingsTable();
+    const updated = await query(
+      `
+      UPDATE provider_listings
+      SET
+        image_url = COALESCE($3, image_url),
+        daily_rate = COALESCE($4, daily_rate),
+        rate_unit = COALESCE($5, rate_unit)
+      WHERE id = $1 AND user_id = $2
+      RETURNING id, image_url AS "imageUrl", daily_rate AS "dailyRate", rate_unit AS "rateUnit"
+      `,
+      [listingId, userId, imageUrl, dailyRate, rateUnit]
+    );
+    if (!updated.rows[0]) {
+      res.status(404).json({ message: "Listing not found" });
+      return;
+    }
+    res.json({ listing: updated.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update listing", error: error?.message || String(error) });
   }
 });
 
@@ -11360,7 +12048,11 @@ router.get("/v1/provider/listings", authRequired, async (req, res) => {
     await ensureProviderListingsTable();
     const result = await query(
       `
+<<<<<<< HEAD
       SELECT id, title, category, channel, status, created_at AS "createdAt"
+=======
+      SELECT id, title, category, channel, status, rc_number AS "rcNumber", image_url AS "imageUrl", daily_rate AS "dailyRate", rate_unit AS "rateUnit", created_at AS "createdAt"
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
       FROM provider_listings
       WHERE user_id = $1
       ORDER BY created_at DESC
@@ -11385,9 +12077,16 @@ router.get("/v1/admin/listings", authRequired, requireRole("admin"), async (req,
         l.category,
         l.channel,
         l.status,
+<<<<<<< HEAD
+=======
+        l.category AS "categoryName",
+        l.rc_number AS "rcNumber",
+        l.removal_reason AS "removalReason",
+>>>>>>> d9be2c44ea67b531c92fe0813ae00bb0baa5dfd7
         l.created_at AS "submitted",
         u.full_name AS "submitterName",
         u.email AS "submitterEmail",
+        u.role AS "submitterRole",
         u.avatar_url AS "submitterAvatarUrl"
       FROM provider_listings l
       LEFT JOIN learn_users u ON u.id = l.user_id
@@ -11405,9 +12104,15 @@ router.get("/v1/admin/listings", authRequired, requireRole("admin"), async (req,
         subtitle: row.category || row.channel,
         submitterName: row.submitterName || "Provider",
         submitterEmail: row.submitterEmail || "",
+        submitterRole: row.submitterRole || "Provider",
         submitterAvatarUrl: row.submitterAvatarUrl || null,
         date: row.submitted ? new Date(row.submitted).toISOString() : null,
         flags: 0,
+        rate: null,
+        channel: row.channel || "",
+        categoryName: row.categoryName || "",
+        rcNumber: row.rcNumber || "",
+        removalReason: row.removalReason || "",
         status: adminListingStatus(row.status)
       }))
     });
@@ -11551,21 +12256,27 @@ router.post("/v1/admin/listings/:id/respond", authRequired, requireRole("admin")
       res.status(400).json({ message: "Choose approve or unpublish." });
       return;
     }
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (action === "unpublish" && reason.length < 3) {
+      res.status(400).json({ message: "A removal reason is required" });
+      return;
+    }
     const status = action === "approve" ? "approved" : "unpublished";
     await ensureProviderListingsTable();
     const updated = await query(
       `
       UPDATE provider_listings
-      SET status = $2, reviewed_at = NOW()
+      SET status = $2, reviewed_at = NOW(), removal_reason = $3
       WHERE id = $1
       RETURNING id, status
       `,
-      [listingId, status]
+      [listingId, status, action === "unpublish" ? reason : null]
     );
     if (!updated.rows[0]) {
       res.status(404).json({ message: "Listing not found" });
       return;
     }
+    await cacheDel(MARKETPLACE_LISTINGS_CACHE_KEY);
     res.json({ listing: { id: listingId, status: adminListingStatus(status) } });
   } catch (error) {
     res.status(500).json({ message: "Failed to update listing", error: error?.message || String(error) });
@@ -11662,6 +12373,12 @@ router.post("/v1/admin/kyc/:id/respond", authRequired, requireRole("admin"), asy
       return;
     }
     const row = updated.rows[0];
+    const message = await notifyApplicantOfKycDecision({
+      userId: row.userId,
+      submissionId: row.id,
+      status: nextStatus,
+      adminNote
+    });
     await query(
       `
       INSERT INTO social_notifications (user_id, actor_id, type, is_read, comment_excerpt)
@@ -11671,25 +12388,9 @@ router.post("/v1/admin/kyc/:id/respond", authRequired, requireRole("admin"), asy
         row.userId,
         adminUserId,
         nextStatus === "approved" ? "provider_kyc_approved" : "provider_kyc_rejected",
-        JSON.stringify({
-          kind: "provider_kyc",
-          submissionId: row.id,
-          status: nextStatus
-        })
+        message
       ]
     );
-    fireSocialPush({
-      userId: row.userId,
-      title: nextStatus === "approved" ? "KYC Approved" : "KYC Rejected",
-      body:
-        nextStatus === "approved"
-          ? "Admin approved your provider registration. You can start your business."
-          : "Admin rejected your provider KYC. Please review and resubmit.",
-      data: {
-        type: nextStatus === "approved" ? "provider_kyc_approved" : "provider_kyc_rejected",
-        submissionId: String(row.id)
-      }
-    });
     res.json({ submission: row });
   } catch (error) {
     res.status(500).json({ message: "Failed to update KYC submission", error: error?.message || String(error) });

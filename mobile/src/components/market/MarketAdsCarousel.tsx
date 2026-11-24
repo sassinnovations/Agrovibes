@@ -120,6 +120,8 @@ function DarkStripCard({
 }
 
 type MarketAdsCarouselProps = {
+  /** When set, these slides replace the seasonal marketplace ads. */
+  ads?: MarketAd[];
   onAdPress?: (ad: MarketAd) => void;
   sectionStyle?: StyleProp<ViewStyle>;
 };
@@ -129,7 +131,7 @@ function stripVariantForIndex(index: number): "light" | "dark" {
   return index % 2 === 0 ? "light" : "dark";
 }
 
-export function MarketAdsCarousel({ onAdPress, sectionStyle }: MarketAdsCarouselProps) {
+export function MarketAdsCarousel({ ads: adsProp, onAdPress, sectionStyle }: MarketAdsCarouselProps) {
   const { width: windowWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -137,7 +139,7 @@ export function MarketAdsCarousel({ onAdPress, sectionStyle }: MarketAdsCarousel
   const userDraggingRef = useRef(false);
   const pauseUntilRef = useRef(0);
 
-  const ads = useMemo(() => getActiveMarketAds(), []);
+  const ads = useMemo(() => adsProp ?? getActiveMarketAds(), [adsProp]);
   const cardWidth = Math.min(BANNER_W, windowWidth - SIDE_PAD * 2);
   const cardHeight = Math.round((cardWidth / BANNER_W) * BANNER_H);
   const snapInterval = cardWidth + CARD_GAP;

@@ -680,7 +680,7 @@ export function ProviderOnboardingScreen() {
           style={styles.stickyCta}
           accessibilityRole="button"
           accessibilityLabel="Become A Provider"
-          onPress={() => navigation.navigate("ProviderTerms")}
+          onPress={() => navigation.navigate("ProviderOfferRole")}
         >
           <Text style={styles.stickyCtaText}>Become A Provider</Text>
         </Pressable>

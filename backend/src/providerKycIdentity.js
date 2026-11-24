@@ -3,12 +3,36 @@ const { query } = require("./db");
 
 let identityReady = false;
 
+const SUREPASS_PRODUCTION_BASE = "https://kyc-api.surepass.io";
+const SUREPASS_HOSTS = [
+  "https://kyc-api.surepass.io",
+  "https://sandbox.surepass.io",
+  "https://kyc-api.surepass.app",
+  "https://sandbox.surepass.app"
+];
+let surepassHostThatWorked = "";
+
 function surepassBase() {
+  if (surepassHostThatWorked) return surepassHostThatWorked;
   const configured = String(process.env.SUREPASS_BASE_URL || "").trim().replace(/\/$/, "");
+  if (configured === "https://kyc-api.surepass.app") return SUREPASS_PRODUCTION_BASE;
   if (configured) return configured;
   const env = String(process.env.SUREPASS_ENV || "").trim().toLowerCase();
-  if (env === "production" || env === "prod") return "https://kyc-api.surepass.io";
-  return "https://sandbox.surepass.app";
+  if (env === "sandbox" || env === "test") return "https://sandbox.surepass.io";
+  return SUREPASS_PRODUCTION_BASE;
+}
+
+function surepassHostOrder() {
+  const hosts = [surepassBase()];
+  for (const host of SUREPASS_HOSTS) {
+    if (!hosts.includes(host)) hosts.push(host);
+  }
+  return hosts;
+}
+
+function surepassTokenRejected(payload) {
+  const message = String(payload?.message || payload?.data?.message || "");
+  return /token\(signature\) is invalid/i.test(message);
 }
 
 function surepassToken() {
@@ -148,28 +172,43 @@ async function ensureProviderKycIdentity() {
   identityReady = true;
 }
 
-async function surepassRequest(path, body) {
+async function surepassFetch(path, { method = "POST", body } = {}) {
   const token = surepassToken();
   if (!token) {
     const error = new Error("Surepass is not configured");
     error.status = 503;
     throw error;
   }
-  let response;
-  try {
-    response = await fetch(`${surepassBase()}${path}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(25000)
-    });
-  } catch {
-    throw providerError("Surepass did not respond. Try again in a moment.", 504);
+  let last = null;
+  for (const host of surepassHostOrder()) {
+    let response;
+    try {
+      response = await fetch(`${host}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {})
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(25000)
+      });
+    } catch {
+      continue;
+    }
+    const payload = await response.json().catch(() => null);
+    last = { response, payload, host };
+    if (!surepassTokenRejected(payload)) {
+      surepassHostThatWorked = host;
+      return last;
+    }
   }
-  const payload = await response.json().catch(() => null);
+  if (!last) throw providerError("Surepass did not respond. Try again in a moment.", 504);
+  return last;
+}
+
+async function surepassRequest(path, body) {
+  const { response, payload } = await surepassFetch(path, { method: "POST", body });
   return { response, payload };
 }
 
@@ -277,7 +316,7 @@ function surepassFailure(payload, fallback, response) {
   const message = String(payload?.message || payload?.data?.remarks || "").trim();
   if (/scope|not valid for this api/i.test(message)) {
     return providerError(
-      "Surepass has not enabled this API for the current token. Turn on Bank Verification in the Surepass sandbox, then submit again.",
+      "Surepass has not enabled this API for the current token. Turn on DigiLocker, Bank Verification, and RC in the Surepass production console, then submit again.",
       422
     );
   }
@@ -344,13 +383,11 @@ async function setDigilockerKycStatus(userId, sessionId, status, message) {
 }
 
 async function pullSurepassDigilockerStatus(clientId) {
-  const token = surepassToken();
-  const response = await fetch(
-    `${surepassBase()}/api/v1/digilocker/status/${encodeURIComponent(clientId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const { response, payload } = await surepassFetch(
+    `/api/v1/digilocker/status/${encodeURIComponent(clientId)}`,
+    { method: "GET" }
   );
   if (response.status === 404) return { state: "unknown" };
-  const payload = await response.json().catch(() => null);
   if (!response.ok) return { state: "pending" };
   const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
   const raw = String(data.status || data.state || "").toLowerCase();
@@ -384,10 +421,10 @@ async function pullSurepassDigilockerStatus(clientId) {
 }
 
 async function startDigilockerSession({ userId, fullName, phone }) {
-  const provider = activeKycProvider();
+  const provider = surepassToken() ? "surepass" : activeKycProvider();
   if (!provider || (provider === "sandbox" && !sandboxConfigured())) {
     throw providerError(
-      "DigiLocker is not configured. Add SANDBOX_API_KEY and SANDBOX_API_SECRET on the server.",
+      "DigiLocker is not configured. Add SUREPASS_TOKEN for the production Surepass DigiLocker API.",
       503
     );
   }
@@ -615,12 +652,10 @@ async function pullSurepassAadhaar(clientId) {
   if (posted.response.ok && posted.payload?.success !== false) {
     return pickAadhaarProfile(posted.payload);
   }
-  const token = surepassToken();
-  const response = await fetch(
-    `${surepassBase()}/api/v1/digilocker/download-aadhaar/${encodeURIComponent(clientId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const { response, payload } = await surepassFetch(
+    `/api/v1/digilocker/download-aadhaar/${encodeURIComponent(clientId)}`,
+    { method: "GET" }
   );
-  const payload = await response.json().catch(() => null);
   if (!response.ok || payload?.success === false) return null;
   return pickAadhaarProfile(payload);
 }
@@ -888,9 +923,9 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
   if (!identity?.aadhaarName) {
     throw providerError("Verify Aadhaar with DigiLocker before the bank account.", 400);
   }
-  const provider = activeKycProvider();
+  const provider = surepassToken() ? "surepass" : activeKycProvider();
   if (!provider || (provider === "sandbox" && !sandboxConfigured())) {
-    throw providerError("Bank verification is not configured. Add SANDBOX_API_KEY and SANDBOX_API_SECRET on the server.", 503);
+    throw providerError("Bank verification is not configured. Add SUREPASS_TOKEN for the production Surepass bank API.", 503);
   }
 
   let holderName = "";
@@ -922,7 +957,7 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
     }
   } else if (provider === "surepass") {
     const body = { id_number: account, ifsc: code, ifsc_details: includeIfscDetails };
-    const paths = ["/api/v1/bank-verification/pennyless", "/api/v1/bank-verification"];
+    const paths = ["/api/v1/bank-verification"];
     let result = null;
     for (const path of paths) {
       result = await surepassRequest(path, body);
@@ -982,6 +1017,30 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
   };
 }
 
+async function verifyVehicleRc(rcNumber) {
+  const idNumber = String(rcNumber || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  if (!/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(idNumber)) {
+    throw providerError("Enter the RC number in the vehicle registration format, such as TS09AB1234.", 400);
+  }
+  if (!surepassToken()) {
+    throw providerError("RC verification is not configured. Add SUREPASS_TOKEN for the production Surepass RC API.", 503);
+  }
+  const { response, payload } = await surepassRequest("/api/v1/rc/rc-full", { id_number: idNumber });
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
+  if (!response.ok || payload?.success === false) {
+    throw surepassFailure(payload, "Vehicle RC could not be verified.", response);
+  }
+  return {
+    rcNumber: String(data.rc_number || data.rcNumber || idNumber)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, ""),
+    ownerName: String(data.owner_name || data.ownerName || "").trim(),
+    vehicleClass: String(data.vehicle_category || data.vehicle_class || data.class || "").trim()
+  };
+}
+
 async function getRegistrationIdentity(userId) {
   await ensureProviderKycIdentity();
   const rows = await query(
@@ -1034,6 +1093,7 @@ module.exports = {
   completeDigilockerSession,
   verifyPanNumber,
   verifyBankAccount,
+  verifyVehicleRc,
   getRegistrationIdentity,
   getCompletedProviderKycIdentity
 };
