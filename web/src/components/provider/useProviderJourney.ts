@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchProviderKycStatus, fetchProviderListings } from "../../api/providerKyc";
+import { readSavedBank } from "../../pages/provider/ProviderBankPage";
 
 export type ProviderJourneyKind = "not_submitted" | "pending" | "rejected" | "approved" | "active";
 
@@ -65,6 +66,18 @@ export function useProviderJourney(token: string | null) {
         const kyc = await fetchProviderKycStatus(token);
         const status = String(kyc.status || "not_submitted").toLowerCase();
         if (status === "approved") {
+          if (!readSavedBank()?.accountNumber) {
+            if (active) {
+              setJourney({
+                ...approved,
+                to: "/provider/bank",
+                action: "Add Bank Account",
+                rentalsTitle: "Add Bank Account",
+                rentalsDetail: "Add bank details before opening listings."
+              });
+            }
+            return;
+          }
           try {
             const listed = await fetchProviderListings(token);
             const count = (listed.listings || []).length;

@@ -24,7 +24,7 @@ export function ProviderAppNavigator() {
   return (
     <View style={styles.root}>
       <Tab.Navigator
-        initialRouteName="Listing"
+        initialRouteName="Overview"
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,

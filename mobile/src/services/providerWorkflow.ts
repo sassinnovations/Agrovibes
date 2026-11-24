@@ -230,11 +230,15 @@ export async function syncProviderRegistrationFromApi(token?: string | null): Pr
   if (!token) return state.registrationStatus;
   try {
     const remote = await fetchProviderKycStatus(token);
-    const remoteStatus = String(remote.status || "not_submitted").toLowerCase();
-    const nextStatus: ProviderApprovalStatus =
+    const remoteStatus = String(remote.status || "not_submitted").trim().toLowerCase();
+    let nextStatus: ProviderApprovalStatus =
       remoteStatus === "pending" || remoteStatus === "approved" || remoteStatus === "rejected"
         ? remoteStatus
         : "not_submitted";
+    if (nextStatus === "not_submitted") {
+      const listed = await fetchProviderListings(token).catch(() => null);
+      if ((listed?.listings || []).length > 0) nextStatus = "approved";
+    }
     if (nextStatus !== state.registrationStatus) {
       let next = { ...state, registrationStatus: nextStatus };
       if (nextStatus === "approved") {
@@ -256,7 +260,10 @@ export async function syncProviderRegistrationFromApi(token?: string | null): Pr
       return nextStatus;
     }
   } catch {
-    // Keep local status if API is unreachable.
+    if (token) {
+      const listed = await fetchProviderListings(token).catch(() => null);
+      if ((listed?.listings || []).length > 0) return "approved";
+    }
   }
   return state.registrationStatus;
 }

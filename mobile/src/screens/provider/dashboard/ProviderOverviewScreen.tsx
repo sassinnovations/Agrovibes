@@ -86,9 +86,9 @@ export function ProviderOverviewScreen() {
     },
     {
       title: "Provider Dashboard Unlocked",
-      detail: "Add tractors and other equipment.",
+      detail: bankReady ? "Add tractors and other equipment." : "Add the bank account before creating listings.",
       done: approved,
-      action: approved ? () => navigation.navigate("ProviderNewListing") : undefined
+      action: approved && bankReady ? () => navigation.navigate("ProviderNewListing") : undefined
     },
     {
       title: "Add Bank Account (One Time)",

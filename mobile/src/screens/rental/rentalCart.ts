@@ -11,6 +11,7 @@ export type RentalCartLine = {
   unitPrice: number;
   unitLabel: string;
   mrp: number;
+  imageUrl?: string;
 };
 
 async function readCart(): Promise<RentalCartLine[]> {
@@ -27,6 +28,19 @@ export async function getRentalCart(): Promise<RentalCartLine[]> {
   return readCart();
 }
 
+export async function rememberRentalCartImages(images: Record<string, string>): Promise<RentalCartLine[]> {
+  const current = await readCart();
+  let changed = false;
+  const next = current.map((item) => {
+    const url = String(images[item.listingId] || "").trim();
+    if (!url || item.imageUrl) return item;
+    changed = true;
+    return { ...item, imageUrl: url };
+  });
+  if (changed) await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  return next;
+}
+
 function sameLine(left: RentalCartLine, right: Pick<RentalCartLine, "listingId" | "option">) {
   return left.listingId === right.listingId && left.option === right.option;
 }
@@ -35,7 +49,11 @@ export async function addRentalCartLine(line: RentalCartLine): Promise<RentalCar
   const current = await readCart();
   const existing = current.find((item) => sameLine(item, line));
   const next = existing
-    ? current.map((item) => (sameLine(item, line) ? { ...item, quantity: item.quantity + line.quantity } : item))
+    ? current.map((item) =>
+        sameLine(item, line)
+          ? { ...item, quantity: item.quantity + line.quantity, imageUrl: line.imageUrl || item.imageUrl }
+          : item
+      )
     : [line, ...current];
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;

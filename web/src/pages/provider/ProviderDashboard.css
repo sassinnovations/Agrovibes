@@ -30,9 +30,10 @@
   text-align: center;
 }
 
-button.provider-flow__card {
+a.provider-flow__card {
+  display: block;
   width: 100%;
-  font: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -124,6 +125,14 @@ button.provider-flow__card {
   margin: 0;
   color: #b42318;
   font-size: 13px;
+}
+
+.provider-back {
+  display: inline-flex;
+  margin-bottom: 12px;
+  color: #c9ff35;
+  font-weight: 800;
+  text-decoration: none;
 }
 
 .provider-panel h1 {

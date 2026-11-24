@@ -78,24 +78,29 @@ export const ContainedAppVideo = React.forwardRef<ContainedAppVideoHandle, Conta
     }, [playbackSources, sourceIndex, uri]);
 
     const videoFrame = useMemo(() => {
+      const maxW = Math.max(1, containerWidth);
+      const maxH = Math.max(1, containerHeight);
       if (fit === "cover") {
-        return { width: containerWidth, height: containerHeight };
+        return { width: maxW, height: maxH };
       }
       if (fit === "contain") {
         const vw = videoSize.width > 0 ? videoSize.width : 9;
         const vh = videoSize.height > 0 ? videoSize.height : 16;
         const aspect = vw / vh;
-        const cw = Math.max(1, containerWidth);
-        const ch = Math.max(1, containerHeight);
-        const heightAtFullWidth = cw / aspect;
-        if (heightAtFullWidth <= ch) {
-          return { width: cw, height: heightAtFullWidth };
+        const heightAtFullWidth = maxW / aspect;
+        if (heightAtFullWidth <= maxH) {
+          return { width: maxW, height: heightAtFullWidth };
         }
-        return { width: ch * aspect, height: ch };
+        return { width: maxH * aspect, height: maxH };
       }
       const vw = videoSize.width > 0 ? videoSize.width : 9;
       const vh = videoSize.height > 0 ? videoSize.height : 16;
-      return computeReelVideoFrame(vw, vh, containerWidth, containerHeight);
+      const frame = computeReelVideoFrame(vw, vh, maxW, maxH);
+      // A surface taller than this page paints into the next reel. Fill the page and crop instead.
+      if (frame.height > maxH || frame.width > maxW) {
+        return { width: maxW, height: maxH };
+      }
+      return frame;
     }, [containerHeight, containerWidth, fit, videoSize.height, videoSize.width]);
 
     const contentFit = fit === "contain" ? "contain" : "cover";
