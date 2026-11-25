@@ -26,6 +26,14 @@ function roleLabel(role?: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function areaLabel(row: AdminListingRow) {
+  const km = Number(row.radiusKm);
+  const radius = Number.isFinite(km) && km > 0 ? Math.round(km) : 10;
+  const place = row.locationLabel?.trim();
+  if (!row.hasArea) return "Area not set";
+  return place ? `${place} · ${radius} km` : `Within ${radius} km`;
+}
+
 function rateLabel(row: AdminListingRow) {
   const amount = Number(String(row.rate ?? "").replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(amount) || amount <= 0) return "Rate on request";
@@ -39,6 +47,7 @@ function summaryText(row: AdminListingRow) {
     row.title,
     [row.categoryName || row.category, row.channel].filter(Boolean).join(" · "),
     row.rcNumber ? `RC ${row.rcNumber}` : "",
+    `Area: ${areaLabel(row)}`,
     submitted ? `Submitted ${submitted}` : "",
     row.removalReason ? `Removal note: ${row.removalReason}` : ""
   ].filter(Boolean);
@@ -187,6 +196,7 @@ export function ListingsPage() {
                 <th>LISTING</th>
                 <th>OWNER/PROVIDER</th>
                 <th>RATE</th>
+                <th>AREA</th>
                 <th>FLAGS</th>
                 <th>STATUS</th>
                 <th>ACTIONS</th>
@@ -195,19 +205,19 @@ export function ListingsPage() {
             <tbody>
               {error ? (
                 <tr>
-                  <td colSpan={6} className="listings-empty">
+                  <td colSpan={7} className="listings-empty">
                     {error}
                   </td>
                 </tr>
               ) : loading ? (
                 <tr>
-                  <td colSpan={6} className="listings-empty">
+                  <td colSpan={7} className="listings-empty">
                     Loading listings…
                   </td>
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="listings-empty">
+                  <td colSpan={7} className="listings-empty">
                     No listings found.
                   </td>
                 </tr>
@@ -234,6 +244,7 @@ export function ListingsPage() {
                         </div>
                       </td>
                       <td>{rateLabel(row)}</td>
+                      <td>{areaLabel(row)}</td>
                       <td>
                         {row.flags > 0 ? (
                           <span className="listings-flag">{row.flags}</span>

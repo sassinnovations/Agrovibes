@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { bookPublicRental } from "../../api/rentals";
 import { useAuth } from "../../auth/AuthContext";
+import { LocationMapPicker } from "../../components/profile/LocationMapPicker";
 import { clearWebRentalCart, readWebRentalCart, type WebRentalCartLine } from "./rentalCart";
 import "./RentalsPortal.css";
 
@@ -18,6 +19,15 @@ export function RentalCartPage() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [place, setPlace] = useState(params.get("location") || user?.locationLabel || "");
+  const [lat, setLat] = useState<number | null>(() => {
+    const value = Number(params.get("lat"));
+    return Number.isFinite(value) ? value : user?.locationLat ?? null;
+  });
+  const [lng, setLng] = useState<number | null>(() => {
+    const value = Number(params.get("lng"));
+    return Number.isFinite(value) ? value : user?.locationLng ?? null;
+  });
+  const [mapOpen, setMapOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
@@ -132,16 +142,29 @@ export function RentalCartPage() {
             </label>
           </div>
 
-          <label className="cart-page__location">
+          <button type="button" className="cart-page__location" onClick={() => setMapOpen(true)}>
             <svg viewBox="0 0 24 24" aria-hidden>
               <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" />
               <circle cx="12" cy="10" r="2.2" />
             </svg>
             <span>
               Location
-              <textarea value={place} onChange={(event) => setPlace(event.target.value)} placeholder="Select" rows={2} />
+              <strong>{place || "Select on Google Maps"}</strong>
             </span>
-          </label>
+          </button>
+          <LocationMapPicker
+            open={mapOpen}
+            label={place}
+            lat={lat}
+            lng={lng}
+            onClose={() => setMapOpen(false)}
+            onSelect={(value) => {
+              setPlace(value.label);
+              setLat(value.lat);
+              setLng(value.lng);
+              setMapOpen(false);
+            }}
+          />
 
           <h2>Bill summary</h2>
           <div className="cart-page__receipt">
