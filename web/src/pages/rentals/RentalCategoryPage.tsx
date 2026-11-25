@@ -19,6 +19,20 @@ export function RentalCategoryPage() {
   const { categoryId = "all" } = useParams();
   const [params] = useSearchParams();
   const location = params.get("location") || "Telangana";
+  const nearLat = Number(params.get("lat"));
+  const nearLng = Number(params.get("lng"));
+  const lat = Number.isFinite(nearLat) ? nearLat : user?.locationLat;
+  const lng = Number.isFinite(nearLng) ? nearLng : user?.locationLng;
+  const search = (() => {
+    const next = new URLSearchParams();
+    if (location) next.set("location", location);
+    if (lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
+      next.set("lat", String(lat));
+      next.set("lng", String(lng));
+    }
+    const query = next.toString();
+    return query ? `?${query}` : "";
+  })();
   const category = categoryId === "all" ? null : rentalCategoryById(categoryId);
   const [rows, setRows] = useState<PublicRentalListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +44,7 @@ export function RentalCategoryPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetchPublicRentals(token, { lat: user?.locationLat, lng: user?.locationLng })
+    fetchPublicRentals(token, { lat, lng })
       .then((data) => {
         if (!active) return;
         setRows((data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved"));
@@ -45,7 +59,7 @@ export function RentalCategoryPage() {
     return () => {
       active = false;
     };
-  }, [token, user?.locationLat, user?.locationLng]);
+  }, [token, lat, lng]);
 
   const listings = useMemo(() => {
     if (!category) return rows;
@@ -84,7 +98,7 @@ export function RentalCategoryPage() {
 
   return (
     <section className="rentals-portal">
-      <Link className="rentals-back" to={`/rentals?location=${encodeURIComponent(location)}`}>
+      <Link className="rentals-back" to={`/rentals${search}`}>
         Back
       </Link>
       <h2>{category ? category.title : "All rentals"}</h2>
@@ -99,7 +113,7 @@ export function RentalCategoryPage() {
               key={item.id}
               className="rentals-tile"
               style={{ backgroundImage: `linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.72)), url(${item.image})` }}
-              to={`/rentals/${item.id}?location=${encodeURIComponent(location)}`}
+              to={`/rentals/${item.id}${search}`}
             >
               <span>{item.title}</span>
             </Link>
@@ -155,7 +169,7 @@ export function RentalCategoryPage() {
                     quantity: 1,
                     imageUrl: row.imageUrl || undefined
                   });
-                  navigate(`/rentals/cart?location=${encodeURIComponent(location)}`);
+                  navigate(`/rentals/cart${search}`);
                 }}
               >
                 Add to cart

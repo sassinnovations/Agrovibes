@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
+import { LocationMapPicker } from "../../components/profile/LocationMapPicker";
 import { useProviderJourney } from "../../components/provider/useProviderJourney";
-import { RENTAL_LOCATIONS } from "./rentalCatalog";
 import "./RentalsPortal.css";
 
 const SHORTCUTS = [
@@ -57,22 +57,41 @@ function ShortcutIcon({ name }: { name: (typeof SHORTCUTS)[number]["icon"] }) {
 }
 
 export function RentalsPortalPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const journey = useProviderJourney(token);
-  const [location, setLocation] = useState("Add location");
-  const [locationOpen, setLocationOpen] = useState(false);
+  const [location, setLocation] = useState(user?.locationLabel?.trim() || "Add location");
+  const [lat, setLat] = useState<number | null>(user?.locationLat ?? null);
+  const [lng, setLng] = useState<number | null>(user?.locationLng ?? null);
+  const [mapOpen, setMapOpen] = useState(false);
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    if (location !== "Add location") return;
+    const saved = user?.locationLabel?.trim();
+    if (!saved) return;
+    setLocation(saved);
+    setLat(user?.locationLat ?? null);
+    setLng(user?.locationLng ?? null);
+  }, [location, user?.locationLabel, user?.locationLat, user?.locationLng]);
   const cards = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return EXPLORE;
     return EXPLORE.filter((item) => item.title.toLowerCase().includes(needle));
   }, [query]);
-  const place = (categoryId: string) => `/rentals/${categoryId}?location=${encodeURIComponent(location)}`;
+  const place = (categoryId: string) => {
+    const params = new URLSearchParams();
+    if (location && location !== "Add location") params.set("location", location);
+    if (lat != null && lng != null) {
+      params.set("lat", String(lat));
+      params.set("lng", String(lng));
+    }
+    const search = params.toString();
+    return `/rentals/${categoryId}${search ? `?${search}` : ""}`;
+  };
 
   return (
     <section className="rentals-portal">
       <header className="rentals-top">
-        <Link className="rentals-cart" to="/rentals/cart" aria-label="Cart">
+        <Link className="rentals-cart" to={place("cart")} aria-label="Cart">
           <svg viewBox="0 0 24 24" aria-hidden>
             <path d="M6 6h15l-1.5 9h-12L5 3H2" />
             <circle cx="9" cy="20" r="1.4" />
@@ -91,7 +110,7 @@ export function RentalsPortalPage() {
         </Link>
       </div>
 
-      <button type="button" className="rentals-portal__location" onClick={() => setLocationOpen((open) => !open)}>
+      <button type="button" className="rentals-portal__location" onClick={() => setMapOpen(true)}>
         <span className="rentals-pin" aria-hidden>
           <svg viewBox="0 0 24 24">
             <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z" />
@@ -103,23 +122,19 @@ export function RentalsPortalPage() {
           <span className="rentals-portal__location-value">{location}</span>
         </span>
       </button>
-      {locationOpen ? (
-        <div className="rentals-sheet">
-          {RENTAL_LOCATIONS.map((name) => (
-            <button
-              key={name}
-              type="button"
-              className={name === location ? "is-active" : ""}
-              onClick={() => {
-                setLocation(name);
-                setLocationOpen(false);
-              }}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <LocationMapPicker
+        open={mapOpen}
+        label={location === "Add location" ? "" : location}
+        lat={lat}
+        lng={lng}
+        onClose={() => setMapOpen(false)}
+        onSelect={(value) => {
+          setLocation(value.label);
+          setLat(value.lat);
+          setLng(value.lng);
+          setMapOpen(false);
+        }}
+      />
 
       <Link className="rentals-hero" to={place("machinery")}>
         <img src="/rentals/hero-tractor.png" alt="" />

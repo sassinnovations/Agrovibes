@@ -665,9 +665,21 @@
 }
 
 .cart-page__location {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  cursor: pointer;
   background: #f6f7f8;
   border-radius: 14px;
   margin-bottom: 18px;
+}
+
+.cart-page__location strong {
+  display: block;
+  margin-top: 2px;
+  color: #1a1a1a;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .cart-page h2 {
