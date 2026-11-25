@@ -36,6 +36,7 @@ import { ProviderNewListingPage } from "../pages/provider/ProviderNewListingPage
 import { ProviderServicesPage } from "../pages/provider/ProviderServicesPage";
 import { ProviderProfilePage } from "../pages/provider/ProviderProfilePage";
 import { RentalsPortalPage } from "../pages/rentals/RentalsPortalPage";
+import { RentalCartPage } from "../pages/rentals/RentalCartPage";
 import { RentalCategoryPage } from "../pages/rentals/RentalCategoryPage";
 
 function ProtectedLayout() {
@@ -71,6 +72,7 @@ export function AppRoutes() {
         <Route index element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="rentals" element={<RentalsPortalPage />} />
+        <Route path="rentals/cart" element={<RentalCartPage />} />
         <Route path="rentals/:categoryId" element={<RentalCategoryPage />} />
         <Route path="drops" element={<ReelsPage />} />
         <Route path="reels" element={<Navigate to="/drops" replace />} />

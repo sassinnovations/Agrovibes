@@ -62,3 +62,15 @@
   padding: 24px 32px 48px;
   background: #262626;
 }
+
+.app-shell--rentals .app-shell__main {
+  justify-content: stretch;
+}
+
+.app-shell.app-shell--rentals:not(.app-shell--provider) .app-shell__main:not(.app-shell__main--with-right) .app-shell__content:not(.app-shell__content--flush):not(.app-shell__content--notifications) {
+  max-width: none;
+  width: 100%;
+  flex: 1;
+  padding: 24px 32px 48px;
+  background: #121212;
+}

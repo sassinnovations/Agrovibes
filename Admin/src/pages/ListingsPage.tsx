@@ -27,9 +27,10 @@ function roleLabel(role?: string) {
 }
 
 function rateLabel(row: AdminListingRow) {
-  const amount = Number(row.rate);
-  if (Number.isFinite(amount) && amount > 0) return `₹${amount.toLocaleString("en-IN")}`;
-  return "Rate on request";
+  const amount = Number(String(row.rate ?? "").replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return "Rate on request";
+  const unit = row.rateUnit?.trim();
+  return `₹${Math.round(amount).toLocaleString("en-IN")}${unit ? ` / ${unit}` : ""}`;
 }
 
 function summaryText(row: AdminListingRow) {

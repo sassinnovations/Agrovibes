@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { bookPublicRental, fetchPublicRentals, type PublicRentalListing } from "../../api/rentals";
 import { useAuth } from "../../auth/AuthContext";
 import { portalCategoryForListing, RENTAL_CATEGORIES, rentalCategoryById } from "./rentalCatalog";
+import { addWebRentalCart } from "./rentalCart";
 import "./RentalsPortal.css";
 
 function rateLabel(row: PublicRentalListing) {
@@ -14,6 +15,7 @@ function rateLabel(row: PublicRentalListing) {
 
 export function RentalCategoryPage() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const { categoryId = "all" } = useParams();
   const [params] = useSearchParams();
   const location = params.get("location") || "Telangana";
@@ -141,6 +143,23 @@ export function RentalCategoryPage() {
                 value={dates[row.id] || ""}
                 onChange={(event) => setDates((prev) => ({ ...prev, [row.id]: event.target.value }))}
               />
+              <button
+                type="button"
+                onClick={() => {
+                  const amount = Number(String(row.dailyRate ?? "").replace(/[^0-9.]/g, ""));
+                  addWebRentalCart({
+                    listingId: String(row.id),
+                    title: row.title,
+                    category: row.category,
+                    unitPrice: Number.isFinite(amount) && amount > 0 ? amount : 0,
+                    quantity: 1,
+                    imageUrl: row.imageUrl || undefined
+                  });
+                  navigate(`/rentals/cart?location=${encodeURIComponent(location)}`);
+                }}
+              >
+                Add to cart
+              </button>
               <button type="button" disabled={busyId === row.id} onClick={() => void book(row)}>
                 {busyId === row.id ? "Booking…" : "Book"}
               </button>
