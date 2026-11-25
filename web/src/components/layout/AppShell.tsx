@@ -9,12 +9,13 @@ const FLUSH_ROUTES = new Set(["/drops", "/reels", "/messages"]);
 export function AppShell() {
   const { pathname } = useLocation();
   const providerApp = pathname === "/provider" || (pathname.startsWith("/provider/") && !pathname.startsWith("/provider/join"));
-  const showRightPanel = !providerApp && RIGHT_PANEL_ROUTES.has(pathname);
+  const rentalsApp = pathname === "/rentals" || pathname.startsWith("/rentals/");
+  const showRightPanel = !providerApp && !rentalsApp && RIGHT_PANEL_ROUTES.has(pathname);
   const flushContent = FLUSH_ROUTES.has(pathname) || pathname.startsWith("/messages/");
   const notificationsView = pathname === "/notifications" || pathname === "/weather" || pathname.startsWith("/schemes");
 
   return (
-    <div className={`app-shell${providerApp ? " app-shell--provider" : ""}`}>
+    <div className={`app-shell${providerApp ? " app-shell--provider" : ""}${rentalsApp ? " app-shell--rentals" : ""}`}>
       <Sidebar />
       <div className={`app-shell__main${showRightPanel ? " app-shell__main--with-right" : ""}`}>
         <div

@@ -14,6 +14,7 @@ export type AdminListingRow = {
   date: string | null;
   flags: number;
   rate?: string | number | null;
+  rateUnit?: string | null;
   channel?: string;
   categoryName?: string;
   rcNumber?: string;
