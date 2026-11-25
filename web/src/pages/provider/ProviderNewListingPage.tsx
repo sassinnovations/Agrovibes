@@ -9,7 +9,8 @@ const CHANNELS = ["Rental", "Services", "Store", "Educators"] as const;
 const CATEGORIES = ["Machinery", "Farm Equipment", "Drivers", "Labor", "Land", "Warehouse", "Drone Spraying", "Soil Testing"];
 
 export function ProviderNewListingPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const [radiusKm, setRadiusKm] = useState("10");
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0]);
@@ -38,6 +39,12 @@ export function ProviderNewListingPage() {
         setError("Admin must approve your provider registration before a listing can be submitted.");
         return;
       }
+      const locationLat = Number(user?.locationLat);
+      const locationLng = Number(user?.locationLng);
+      if (!Number.isFinite(locationLat) || !Number.isFinite(locationLng)) {
+        setError("Set your location on your profile. Farmers only see this listing within the 5–10 km area you choose.");
+        return;
+      }
       let imageUrl = "";
       if (photoFile) {
         const uploaded = await uploadImageFile(photoFile);
@@ -49,7 +56,11 @@ export function ProviderNewListingPage() {
         channel,
         imageUrl: imageUrl || undefined,
         dailyRate: dailyRate.trim() || undefined,
-        rateUnit: "Day"
+        rateUnit: "Day",
+        locationLabel: user?.locationLabel || "",
+        locationLat,
+        locationLng,
+        radiusKm: Number(radiusKm) || 10
       });
       if (imageUrl && created.listing?.id) saveListingImage(created.listing.id, imageUrl);
       else if (photo && created.listing?.id) saveListingImage(created.listing.id, photo);
@@ -88,6 +99,13 @@ export function ProviderNewListingPage() {
       <label>
         Rate (₹)
         <input value={dailyRate} onChange={(event) => setDailyRate(event.target.value)} inputMode="decimal" placeholder="800" />
+      </label>
+      <label>
+        Show to farmers within
+        <select value={radiusKm} onChange={(event) => setRadiusKm(event.target.value)}>
+          <option value="5">5 km</option>
+          <option value="10">10 km</option>
+        </select>
       </label>
       <label>
         Photo

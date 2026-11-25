@@ -122,6 +122,10 @@ export async function submitProviderListing(
     imageUrl?: string;
     dailyRate?: string | number;
     rateUnit?: string;
+    locationLabel?: string;
+    locationLat?: number;
+    locationLng?: number;
+    radiusKm?: number;
   }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {

@@ -11861,6 +11861,22 @@ async function ensureProviderListingsTable() {
   await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS image_url TEXT`);
   await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS daily_rate NUMERIC`);
   await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS rate_unit TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS location_label TEXT`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS location_lat DOUBLE PRECISION`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS location_lng DOUBLE PRECISION`);
+  await query(`ALTER TABLE provider_listings ADD COLUMN IF NOT EXISTS radius_km NUMERIC`);
+}
+
+function listingCoord(value, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || Math.abs(n) > max) return null;
+  return n;
+}
+
+function listingRadiusKm(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 10;
+  return Math.min(100, n);
 }
 
 function listingMoney(value) {
@@ -11902,6 +11918,10 @@ router.post("/v1/provider/listings", authRequired, async (req, res) => {
     const imageUrl = listingImageUrl(req.body?.imageUrl);
     const dailyRate = listingMoney(req.body?.dailyRate);
     const rateUnit = String(req.body?.rateUnit || "").trim().slice(0, 40) || null;
+    const locationLabel = String(req.body?.locationLabel || "").trim().slice(0, 160) || null;
+    const locationLat = listingCoord(req.body?.locationLat, 90);
+    const locationLng = listingCoord(req.body?.locationLng, 180);
+    const radiusKm = listingRadiusKm(req.body?.radiusKm);
     let rcNumber = String(req.body?.rcNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16) || null;
     if (rcNumber && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(rcNumber)) {
       res.status(400).json({ message: "Enter the RC number in the vehicle registration format, such as TS09AB1234." });
@@ -11939,11 +11959,14 @@ router.post("/v1/provider/listings", authRequired, async (req, res) => {
     await ensureProviderListingsTable();
     const inserted = await query(
       `
-      INSERT INTO provider_listings (user_id, title, category, channel, status, rc_number, image_url, daily_rate, rate_unit)
-      VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8)
+      INSERT INTO provider_listings (
+        user_id, title, category, channel, status, rc_number, image_url, daily_rate, rate_unit,
+        location_label, location_lat, location_lng, radius_km
+      )
+      VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING id, title, category, channel, status, rc_number AS "rcNumber", image_url AS "imageUrl", daily_rate AS "dailyRate", rate_unit AS "rateUnit", created_at AS "createdAt"
       `,
-      [userId, title, category, channel, rcNumber, imageUrl, dailyRate, rateUnit]
+      [userId, title, category, channel, rcNumber, imageUrl, dailyRate, rateUnit, locationLabel, locationLat, locationLng, radiusKm]
     );
     res.status(201).json({ listing: inserted.rows[0] });
   } catch (error) {
@@ -11955,6 +11978,8 @@ router.get("/v1/rentals/listings", authOptional, async (req, res) => {
   try {
     const viewerId = Number(req.user?.userId);
     const userId = Number.isFinite(viewerId) && viewerId > 0 ? viewerId : 0;
+    const nearLat = listingCoord(req.query?.lat, 90);
+    const nearLng = listingCoord(req.query?.lng, 180);
     await ensureProviderListingsTable();
     const result = await query(
       `
@@ -11968,15 +11993,47 @@ router.get("/v1/rentals/listings", authOptional, async (req, res) => {
         l.daily_rate AS "dailyRate",
         l.rate_unit AS "rateUnit",
         l.created_at AS "createdAt",
+        COALESCE(NULLIF(l.location_label, ''), NULLIF(u.location_label, '')) AS "locationLabel",
+        COALESCE(l.radius_km, 10) AS "radiusKm",
+        CASE
+          WHEN $2::float8 IS NULL OR COALESCE(l.location_lat, u.location_lat) IS NULL THEN NULL
+          ELSE ROUND((
+            6371 * acos(
+              LEAST(1.0, GREATEST(-1.0,
+                cos(radians($2::float8)) * cos(radians(COALESCE(l.location_lat, u.location_lat)))
+                * cos(radians(COALESCE(l.location_lng, u.location_lng)) - radians($3::float8))
+                + sin(radians($2::float8)) * sin(radians(COALESCE(l.location_lat, u.location_lat)))
+              ))
+            )
+          )::numeric, 1)
+        END AS "distanceKm",
         COALESCE(u.full_name, 'Provider') AS "providerName"
       FROM provider_listings l
       LEFT JOIN learn_users u ON u.id = l.user_id
       WHERE lower(COALESCE(l.status, '')) NOT IN ('unpublished', 'rejected')
         AND (lower(COALESCE(l.status, '')) = 'approved' OR l.user_id = $1)
+        AND (
+          l.user_id = $1
+          OR $2::float8 IS NULL
+          OR $3::float8 IS NULL
+          OR (
+            COALESCE(l.location_lat, u.location_lat) IS NOT NULL
+            AND COALESCE(l.location_lng, u.location_lng) IS NOT NULL
+            AND (
+              6371 * acos(
+                LEAST(1.0, GREATEST(-1.0,
+                  cos(radians($2::float8)) * cos(radians(COALESCE(l.location_lat, u.location_lat)))
+                  * cos(radians(COALESCE(l.location_lng, u.location_lng)) - radians($3::float8))
+                  + sin(radians($2::float8)) * sin(radians(COALESCE(l.location_lat, u.location_lat)))
+                ))
+              )
+            ) <= COALESCE(l.radius_km, 10)
+          )
+        )
       ORDER BY l.created_at DESC
       LIMIT 100
       `,
-      [userId]
+      [userId, nearLat, nearLng]
     );
     res.json({ listings: result.rows });
   } catch (error) {

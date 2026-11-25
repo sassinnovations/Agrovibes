@@ -387,6 +387,10 @@ export async function submitListingForApproval(input: {
   dailyRate?: string | number;
   rateUnit?: string;
   rcNumber?: string;
+  locationLabel?: string;
+  locationLat?: number;
+  locationLng?: number;
+  radiusKm?: number;
   token?: string | null;
 }): Promise<string> {
   if (!input.token) {
@@ -405,7 +409,11 @@ export async function submitListingForApproval(input: {
     rcNumber: input.rcNumber,
     imageUrl: imageUrl || undefined,
     dailyRate,
-    rateUnit: input.rateUnit
+    rateUnit: input.rateUnit,
+    locationLabel: input.locationLabel,
+    locationLat: input.locationLat,
+    locationLng: input.locationLng,
+    radiusKm: input.radiusKm
   });
   const serverId = Number(created?.listing?.id);
   if (!Number.isFinite(serverId) || serverId <= 0) {

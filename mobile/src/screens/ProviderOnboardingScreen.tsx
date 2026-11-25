@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
-  LayoutChangeEvent,
+  Image,
+  type ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,11 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../theme/appColors";
+
+const HERO_FARMER = require("../../assets/provider/onboarding/farmer-tractor.png");
+const MACHINERY_LINEUP = require("../../assets/provider/onboarding/machinery-lineup.jpg");
+const FIELD_PAYMENT = require("../../assets/provider/onboarding/field-payment.png");
+const FIELD_ACTIVITIES = require("../../assets/provider/onboarding/field-activities.png");
 
 const BG = "#0a0a0a";
 const PLACEHOLDER = "#2b2b2b";
@@ -191,12 +197,8 @@ function LearnLink({ onPress }: { onPress?: () => void }) {
   );
 }
 
-function MediaPlaceholder({ height = 220 }: { height?: number }) {
-  return (
-    <View style={[styles.mediaPlaceholder, { height }]}>
-      <Ionicons name="image-outline" size={36} color="rgba(255,255,255,0.28)" />
-    </View>
-  );
+function SceneImage({ source, height = 220 }: { source: ImageSourcePropType; height?: number }) {
+  return <Image source={source} style={[styles.sceneImage, { height }]} resizeMode="cover" />;
 }
 
 type RevealBlockProps = {
@@ -205,9 +207,11 @@ type RevealBlockProps = {
   viewportHeight: number;
   style?: object;
   delay?: number;
+  sectionKey?: string;
+  onSectionY?: (key: string, y: number) => void;
 };
 
-function RevealBlock({ children, scrollY, viewportHeight, style, delay = 0 }: RevealBlockProps) {
+function RevealBlock({ children, scrollY, viewportHeight, style, delay = 0, sectionKey, onSectionY }: RevealBlockProps) {
   const viewRef = useRef<View>(null);
   const revealed = useRef(false);
   const opacity = useRef(new Animated.Value(0)).current;
@@ -254,7 +258,10 @@ function RevealBlock({ children, scrollY, viewportHeight, style, delay = 0 }: Re
   return (
     <Animated.View
       ref={viewRef}
-      onLayout={checkReveal}
+      onLayout={(event) => {
+        checkReveal();
+        if (sectionKey) onSectionY?.(sectionKey, event.nativeEvent.layout.y);
+      }}
       style={[
         style,
         {
@@ -288,8 +295,12 @@ export function ProviderOnboardingScreen() {
     }
   };
 
-  const rememberSection = (key: string) => (event: LayoutChangeEvent) => {
-    sectionYs.current[key] = event.nativeEvent.layout.y;
+  const rememberSection = (key: string, y: number) => {
+    sectionYs.current[key] = y;
+  };
+
+  const startRegistration = () => {
+    navigation.navigate("ProviderOfferRole");
   };
 
   const onScroll = Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
@@ -325,10 +336,10 @@ export function ProviderOnboardingScreen() {
             who need what you offer — right in your region.
           </Text>
           <View style={styles.heroActions}>
-            <GhostButton label="Register" />
+            <GhostButton label="Register" onPress={startRegistration} />
             <GhostButton label="Learn more" onPress={() => scrollToKey("providers")} />
           </View>
-          <MediaPlaceholder height={240} />
+          <SceneImage source={HERO_FARMER} height={240} />
         </RevealBlock>
 
         <RevealBlock
@@ -336,8 +347,10 @@ export function ProviderOnboardingScreen() {
           viewportHeight={viewportHeight}
           style={styles.providersSection}
           delay={40}
+          sectionKey="providers"
+          onSectionY={rememberSection}
         >
-          <View onLayout={rememberSection("providers")}>
+          <View>
             <Text style={styles.sectionTag}>Providers</Text>
             <Text style={styles.sectionTitle}>Choose your path to earning</Text>
             <Text style={styles.sectionBody}>
@@ -345,7 +358,7 @@ export function ProviderOnboardingScreen() {
               works for you.
             </Text>
             <View style={styles.sectionActions}>
-              <GhostButton label="Register" />
+              <GhostButton label="Register" onPress={startRegistration} />
               <LearnLink onPress={() => scrollToKey("process")} />
             </View>
           </View>
@@ -380,10 +393,10 @@ export function ProviderOnboardingScreen() {
             <Text style={styles.panelTitle}>{activeConfig.title}</Text>
             <Text style={styles.panelBody}>{activeConfig.body}</Text>
             <View style={styles.sectionActions}>
-              <GhostButton label="Register" />
+              <GhostButton label="Register" onPress={startRegistration} />
               <LearnLink onPress={() => scrollToKey("process")} />
             </View>
-            <MediaPlaceholder height={260} />
+            <SceneImage source={MACHINERY_LINEUP} height={260} />
           </View>
         </RevealBlock>
 
@@ -392,8 +405,10 @@ export function ProviderOnboardingScreen() {
           viewportHeight={viewportHeight}
           style={styles.trustSection}
           delay={40}
+          sectionKey="trust"
+          onSectionY={rememberSection}
         >
-          <View onLayout={rememberSection("trust")}>
+          <View>
             <Text style={styles.leftTag}>Trust</Text>
             <Text style={styles.leftTitle}>Connect with serious farmers who are ready to book</Text>
             <Text style={styles.leftBody}>
@@ -401,7 +416,7 @@ export function ProviderOnboardingScreen() {
               secure payments, and a clean dashboard let you run your operation without the usual headaches.
             </Text>
             <View style={[styles.sectionActions, styles.sectionActionsLeft]}>
-              <GhostButton label="Register" />
+              <GhostButton label="Register" onPress={startRegistration} />
               <LearnLink onPress={() => scrollToKey("process")} />
             </View>
           </View>
@@ -426,12 +441,14 @@ export function ProviderOnboardingScreen() {
           viewportHeight={viewportHeight}
           style={styles.processSection}
           delay={40}
+          sectionKey="process"
+          onSectionY={rememberSection}
         >
-          <View onLayout={rememberSection("process")}>
+          <View>
             <Text style={styles.sectionTag}>Process</Text>
             <Text style={styles.sectionTitle}>How it works</Text>
             <View style={styles.sectionActions}>
-              <GhostButton label="Register" />
+              <GhostButton label="Register" onPress={startRegistration} />
               <LearnLink onPress={() => scrollToKey("verification")} />
             </View>
           </View>
@@ -465,8 +482,10 @@ export function ProviderOnboardingScreen() {
           viewportHeight={viewportHeight}
           style={styles.verifyHeader}
           delay={40}
+          sectionKey="verification"
+          onSectionY={rememberSection}
         >
-          <View onLayout={rememberSection("verification")}>
+          <View>
             <Text style={styles.sectionTag}>Verification</Text>
             <Text style={styles.sectionTitle}>Trust built on proof</Text>
             <Text style={styles.sectionBody}>Every provider earns a verified badge. Here is what you need.</Text>
@@ -485,8 +504,8 @@ export function ProviderOnboardingScreen() {
             <Text style={styles.verifyCardTitle}>{card.title}</Text>
             <Text style={styles.verifyCardBody}>{card.body}</Text>
             <View style={[styles.sectionActions, styles.sectionActionsLeft]}>
-              {index === 0 ? <GhostButton label="Register" /> : null}
-              <LearnLink />
+              {index === 0 ? <GhostButton label="Register" onPress={startRegistration} /> : null}
+              <LearnLink onPress={() => scrollToKey("pricing")} />
             </View>
           </RevealBlock>
         ))}
@@ -496,8 +515,10 @@ export function ProviderOnboardingScreen() {
           viewportHeight={viewportHeight}
           style={styles.pricingSection}
           delay={40}
+          sectionKey="pricing"
+          onSectionY={rememberSection}
         >
-          <View onLayout={rememberSection("pricing")}>
+          <View>
             <Text style={styles.sectionTag}>Pricing</Text>
             <Text style={styles.sectionTitle}>A simple commission. No surprises. No hidden fees</Text>
             <Text style={styles.sectionBody}>
@@ -513,10 +534,10 @@ export function ProviderOnboardingScreen() {
               ))}
             </View>
             <View style={styles.sectionActions}>
-              <GhostButton label="Register" />
+              <GhostButton label="Register" onPress={startRegistration} />
               <LearnLink onPress={() => scrollToKey("dashboard")} />
             </View>
-            <MediaPlaceholder height={220} />
+            <SceneImage source={FIELD_PAYMENT} height={220} />
           </View>
         </RevealBlock>
 
@@ -525,8 +546,10 @@ export function ProviderOnboardingScreen() {
           viewportHeight={viewportHeight}
           style={styles.dashboardSection}
           delay={40}
+          sectionKey="dashboard"
+          onSectionY={rememberSection}
         >
-          <View onLayout={rememberSection("dashboard")}>
+          <View>
             <Text style={styles.leftTag}>Dashboard</Text>
             <Text style={styles.leftTitle}>Your entire business, run from one clean dashboard</Text>
             <Text style={styles.leftBody}>
@@ -534,7 +557,7 @@ export function ProviderOnboardingScreen() {
               your availability with a few taps.
             </Text>
             <View style={[styles.sectionActions, styles.sectionActionsLeft]}>
-              <GhostButton label="Register" />
+              <GhostButton label="Register" onPress={startRegistration} />
               <LearnLink onPress={() => scrollToKey("stories")} />
             </View>
           </View>
@@ -555,7 +578,7 @@ export function ProviderOnboardingScreen() {
         ))}
 
         <RevealBlock scrollY={scrollY} viewportHeight={viewportHeight} style={styles.mediaWrap}>
-          <MediaPlaceholder height={280} />
+          <SceneImage source={FIELD_ACTIVITIES} height={280} />
         </RevealBlock>
 
         <RevealBlock
@@ -563,8 +586,10 @@ export function ProviderOnboardingScreen() {
           viewportHeight={viewportHeight}
           style={styles.storiesSection}
           delay={40}
+          sectionKey="stories"
+          onSectionY={rememberSection}
         >
-          <View onLayout={rememberSection("stories")}>
+          <View>
             <Text style={styles.leftTitle}>Provider stories</Text>
             <Text style={styles.leftBody}>Hear from the people already earning with Cropvibe.</Text>
 
@@ -619,7 +644,7 @@ export function ProviderOnboardingScreen() {
             for you.
           </Text>
           <View style={styles.sectionActions}>
-            <GhostButton label="Register" />
+            <GhostButton label="Register" onPress={startRegistration} />
             <GhostButton label="Learn" onPress={() => scrollToKey("providers")} />
           </View>
         </RevealBlock>
@@ -771,12 +796,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600"
   },
-  mediaPlaceholder: {
+  sceneImage: {
     width: "100%",
     backgroundColor: PLACEHOLDER,
-    borderRadius: 2,
-    alignItems: "center",
-    justifyContent: "center"
+    borderRadius: 8
   },
   providersSection: {
     paddingHorizontal: 20,

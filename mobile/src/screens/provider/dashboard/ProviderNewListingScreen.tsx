@@ -876,7 +876,7 @@ function StepIndicator({ step }: { step: 1 | 2 | 3 }) {
 
 export function ProviderNewListingScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const insets = useSafeAreaInsets();
   const [channel, setChannel] = useState<ListingChannel>("Rental");
   const [step, setStep] = useState<Step>(1);
@@ -1297,6 +1297,20 @@ export function ProviderNewListingScreen() {
       );
       return;
     }
+    const locationLat = Number(user?.locationLat);
+    const locationLng = Number(user?.locationLng);
+    if (!Number.isFinite(locationLat) || !Number.isFinite(locationLng)) {
+      Alert.alert(
+        "Add your location",
+        "Set your location on your profile before posting. Farmers only see this listing within the 5–10 km area you choose."
+      );
+      return;
+    }
+    const postedRadius = Number(String(serviceArea).match(/(\d+(?:\.\d+)?)/)?.[1]);
+    const radiusKm = Number.isFinite(postedRadius) && postedRadius > 0 ? postedRadius : 10;
+    const locationLabel = isLand
+      ? [landTown, landDistrict].filter(Boolean).join(", ")
+      : user?.locationLabel || "";
     const listingTitle = equipmentName.trim() || selectedAssetMeta?.title || "Untitled listing";
     const listingCategory = selectedAssetMeta?.title || (isService ? "Service" : "Rental");
     const publishedRate = (dailyRate.trim() || (isMachinery ? priceHr.trim() : "")).replace(/,/g, "");
@@ -1309,6 +1323,10 @@ export function ProviderNewListingScreen() {
         imageUri: photos[0]?.uri,
         dailyRate: publishedRate,
         rateUnit: publishedUnit,
+        locationLabel,
+        locationLat,
+        locationLng,
+        radiusKm,
         token
       });
     } catch (error) {
