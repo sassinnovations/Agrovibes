@@ -108,8 +108,9 @@
   flex-direction: column;
   justify-content: space-between;
   background-color: #303132;
-  background-size: cover;
-  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: right center;
 }
 
 .rentals-banner small {
@@ -198,8 +199,9 @@
   padding: 12px;
   font-weight: 800;
   background-color: #303132;
-  background-size: cover;
-  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center top;
 }
 
 .rentals-tile span {
@@ -222,11 +224,17 @@
 .rentals-card__photo {
   display: block;
   width: 100%;
-  height: 140px;
+  height: 160px;
   object-fit: cover;
   border-radius: 10px;
   margin-bottom: 10px;
-  background: #262626;
+  background: #1c1c1c;
+}
+
+.rentals-card__photo--fit {
+  object-fit: contain;
+  padding: 8px;
+  box-sizing: border-box;
 }
 
 .rentals-card strong {

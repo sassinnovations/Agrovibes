@@ -988,8 +988,17 @@ export async function verifyProviderKycOtp(token: string, aadhaar: string, code:
   })) as { success: boolean; aadhaarLast4: string };
 }
 
-export async function fetchRentalListings(token?: string | null) {
-  return (await fetchWithAuth(`${API_BASE_URL}/v1/rentals/listings`, token ?? null)) as {
+export async function fetchRentalListings(
+  token?: string | null,
+  near?: { lat?: number | null; lng?: number | null }
+) {
+  const params = new URLSearchParams();
+  if (Number.isFinite(Number(near?.lat)) && Number.isFinite(Number(near?.lng))) {
+    params.set("lat", String(near?.lat));
+    params.set("lng", String(near?.lng));
+  }
+  const query = params.toString();
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/rentals/listings${query ? `?${query}` : ""}`, token ?? null)) as {
     listings: Array<{
       id: number;
       title: string;
@@ -999,6 +1008,9 @@ export async function fetchRentalListings(token?: string | null) {
       imageUrl?: string | null;
       dailyRate?: number | string | null;
       rateUnit?: string | null;
+      locationLabel?: string | null;
+      radiusKm?: number | string | null;
+      distanceKm?: number | string | null;
       createdAt: string;
       providerName: string;
     }>;
@@ -1055,6 +1067,10 @@ export async function submitProviderListing(
     imageUrl?: string;
     dailyRate?: string | number;
     rateUnit?: string;
+    locationLabel?: string;
+    locationLat?: number;
+    locationLng?: number;
+    radiusKm?: number;
   }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {

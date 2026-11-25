@@ -13,7 +13,7 @@ function rateLabel(row: PublicRentalListing) {
 }
 
 export function RentalCategoryPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { categoryId = "all" } = useParams();
   const [params] = useSearchParams();
   const location = params.get("location") || "Telangana";
@@ -28,7 +28,7 @@ export function RentalCategoryPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetchPublicRentals(token)
+    fetchPublicRentals(token, { lat: user?.locationLat, lng: user?.locationLng })
       .then((data) => {
         if (!active) return;
         setRows((data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved"));
@@ -43,7 +43,7 @@ export function RentalCategoryPage() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, user?.locationLat, user?.locationLng]);
 
   const listings = useMemo(() => {
     if (!category) return rows;
@@ -107,16 +107,32 @@ export function RentalCategoryPage() {
 
       {loading ? <p className="rentals-note">Loading approved listings…</p> : null}
       {!loading && listings.length === 0 ? (
-        <p className="rentals-note">No approved listings in this category yet. A listing shows here after admin approves it.</p>
+        <p className="rentals-note">
+          No approved listings within your area yet. A listing appears here after admin approval, and only when you are inside the 5–10 km distance the provider posted.
+        </p>
       ) : null}
       <div className="rentals-list">
         {listings.map((row) => (
           <article key={row.id} className="rentals-card">
-            {row.imageUrl ? <img className="rentals-card__photo" src={row.imageUrl} alt="" /> : null}
+            {(() => {
+              const categoryId = portalCategoryForListing(row.category, row.title);
+              const fallback = RENTAL_CATEGORIES.find((item) => item.id === categoryId)?.image;
+              const src = row.imageUrl || fallback;
+              if (!src) return null;
+              return (
+                <img
+                  className={row.imageUrl ? "rentals-card__photo" : "rentals-card__photo rentals-card__photo--fit"}
+                  src={src}
+                  alt=""
+                />
+              );
+            })()}
             <strong>{row.title}</strong>
             <p>
               {row.providerName}
               {row.category ? ` · ${row.category}` : ""}
+              {row.locationLabel ? ` · ${row.locationLabel}` : ""}
+              {row.distanceKm != null && row.distanceKm !== "" ? ` · ${row.distanceKm} km away` : ""}
               {` · ${rateLabel(row)}`}
             </p>
             <div className="rentals-card__row">

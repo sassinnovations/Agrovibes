@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image, type ImageSourcePropType, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../auth/AuthContext";
 import type { RootStackParamList } from "../../navigation/rootStackTypes";
@@ -43,6 +43,11 @@ function rememberCartItem(item: RentalCatalogItem, categoryTitle: string) {
   });
 }
 
+function rentalImageFit(source: ImageSourcePropType): "cover" | "contain" {
+  if (source && typeof source === "object" && "uri" in source && source.uri) return "cover";
+  return "contain";
+}
+
 function rupee(n: number) {
   return "\u20B9" + Math.round(n).toLocaleString("en-IN");
 }
@@ -62,10 +67,15 @@ function liveListingToCatalog(row: {
   imageUrl?: string | null;
   dailyRate?: number | string | null;
   rateUnit?: string | null;
+  locationLabel?: string | null;
+  distanceKm?: number | string | null;
 }): RentalCatalogItem {
   const categoryId = portalCategoryForListing(row.category, row.title);
   const cover = RENTAL_CATALOG_SUBS[categoryId]?.[0];
   const provider = row.providerName?.trim();
+  const distance = Number(row.distanceKm);
+  const place = row.locationLabel?.trim();
+  const away = Number.isFinite(distance) ? `${distance} km away` : "";
   const price = Number(String(row.dailyRate ?? "").replace(/[^0-9.]/g, "")) || 0;
   const uploaded = String(row.imageUrl || "").trim();
   return {
@@ -73,7 +83,7 @@ function liveListingToCatalog(row: {
     categoryId,
     subCategoryId: cover?.id ?? "all",
     title: row.title,
-    subtitle: [row.category, row.channel, provider].filter(Boolean).join(" · "),
+    subtitle: [row.category, row.channel, provider, place, away].filter(Boolean).join(" · "),
     detail: `${row.title} is an approved Cropvibe listing.`,
     rating: 0,
     reviewLabel: "New",
@@ -90,10 +100,12 @@ function liveListingToCatalog(row: {
 
 export function RentalCategoryScreen() {
   useAndroidNestedStackBack();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "RentalCategory">>();
   const location = route.params?.location || "Telangana";
+  const nearLat = Number.isFinite(Number(route.params?.lat)) ? Number(route.params?.lat) : Number(user?.locationLat);
+  const nearLng = Number.isFinite(Number(route.params?.lng)) ? Number(route.params?.lng) : Number(user?.locationLng);
   const category = rentalCategoryById(route.params?.categoryId || "");
   const { width } = useWindowDimensions();
   const subs = category ? RENTAL_CATALOG_SUBS[category.id] ?? [] : [];
@@ -108,7 +120,7 @@ export function RentalCategoryScreen() {
     useCallback(() => {
       let active = true;
       setLoadingLive(true);
-      void fetchRentalListings(token)
+      void fetchRentalListings(token, { lat: nearLat, lng: nearLng })
         .then((data) => {
           if (!active) return;
           const approved = (data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved");
@@ -123,7 +135,7 @@ export function RentalCategoryScreen() {
       return () => {
         active = false;
       };
-    }, [token])
+    }, [nearLat, nearLng, token])
   );
 
   useEffect(() => {
@@ -189,8 +201,8 @@ export function RentalCategoryScreen() {
           {RENTAL_CATEGORIES.map((item) => {
             const cover = RENTAL_CATALOG_SUBS[item.id]?.[0];
             return (
-              <Pressable key={item.id} style={styles.allRow} onPress={() => navigateToRentalCategory(item.id, location)}>
-                {cover ? <Image source={cover.image} style={styles.allImage} resizeMode="cover" /> : null}
+              <Pressable key={item.id} style={styles.allRow} onPress={() => navigateToRentalCategory(item.id, location, { lat: nearLat, lng: nearLng })}>
+                {cover ? <Image source={cover.image} style={styles.allImage} resizeMode="contain" /> : null}
                 <View style={styles.allText}>
                   <Text style={styles.allTitle}>{item.title}</Text>
                   <Text style={styles.allBlurb}>{item.blurb}</Text>
@@ -288,7 +300,7 @@ function RentalCard({
   return (
     <Pressable style={styles.card} onPress={onOpen}>
       <View style={styles.media}>
-        <Image source={item.image} style={styles.mediaImage} resizeMode="cover" />
+        <Image source={item.image} style={styles.mediaImage} resizeMode={rentalImageFit(item.image)} />
         <Pressable style={styles.addBtn} onPress={onAdd} accessibilityLabel="Add">
           <Ionicons name="add" size={22} color={APP_TEXT_ON_LIME} />
         </Pressable>
@@ -366,7 +378,7 @@ function RentalSheet({
         <Pressable style={styles.sheetDismiss} onPress={onClose} />
         {item ? (
           <View style={styles.sheet}>
-            <Image source={item.image} style={styles.sheetImage} resizeMode="cover" />
+            <Image source={item.image} style={styles.sheetImage} resizeMode={rentalImageFit(item.image)} />
             <View style={styles.sheetTools}>
               <Pressable style={styles.sheetIconBtn} onPress={onClose} accessibilityLabel="Back">
                 <Ionicons name="chevron-back" size={22} color={APP_TEXT} />
@@ -455,7 +467,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 10
   },
-  allImage: { width: 64, height: 64, borderRadius: 10 },
+  allImage: { width: 64, height: 64, borderRadius: 10, backgroundColor: "#173024" },
   allText: { flex: 1 },
   allTitle: { color: APP_TEXT, fontSize: 15, fontWeight: "800" },
   allBlurb: { color: APP_TEXT_MUTED, fontSize: 12, lineHeight: 17, marginTop: 2 },
