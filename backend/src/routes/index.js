@@ -12221,25 +12221,48 @@ router.post("/v1/rentals/bookings", authRequired, async (req, res) => {
 
 router.get("/v1/provider/bookings", authRequired, async (req, res) => {
   try {
+    const userId = Number(req.user.userId);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      res.status(401).json({ message: "Invalid auth session" });
+      return;
+    }
+    await ensureProviderListingsTable();
     await ensureRentalBookingsTable();
     const result = await query(
       `
-      SELECT
-        b.id,
-        b.title,
-        b.category,
-        b.location,
-        b.booking_date AS "date",
-        b.note,
-        b.status,
-        b.created_at AS "createdAt",
-        u.full_name AS "customerName",
-        u.phone AS "customerPhone"
-      FROM rental_bookings b
-      LEFT JOIN learn_users u ON u.id = b.user_id
-      ORDER BY b.created_at DESC
+      SELECT *
+      FROM (
+        SELECT DISTINCT ON (b.id)
+          b.id,
+          b.listing_id AS "listingId",
+          b.title,
+          b.category,
+          b.location,
+          b.booking_date AS "date",
+          b.note,
+          b.status,
+          b.created_at AS "createdAt",
+          u.full_name AS "customerName",
+          u.phone AS "customerPhone",
+          l.daily_rate AS "amount",
+          l.rate_unit AS "rateUnit"
+        FROM rental_bookings b
+        JOIN provider_listings l
+          ON l.user_id = $1
+         AND (
+           NULLIF(b.listing_id, '') = l.id::text
+           OR (
+             COALESCE(NULLIF(b.listing_id, ''), '') = ''
+             AND lower(b.title) = lower(l.title)
+           )
+         )
+        LEFT JOIN learn_users u ON u.id = b.user_id
+        ORDER BY b.id, l.created_at DESC
+      ) rows
+      ORDER BY "createdAt" DESC
       LIMIT 200
-      `
+      `,
+      [userId]
     );
     res.json({ bookings: result.rows });
   } catch (error) {

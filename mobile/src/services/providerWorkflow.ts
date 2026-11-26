@@ -555,8 +555,11 @@ export async function getProviderBookings(): Promise<ProviderBookingRecord[]> {
   const { getCustomerRentalBookings } = await import("../screens/rental/customerRentalBookings");
   const customerBookings = await getCustomerRentalBookings();
   const state = await readState();
+  const ownIds = new Set(state.listings.map((row) => String(row.id)));
+  const ownTitles = new Set(state.listings.map((row) => row.title.trim().toLowerCase()).filter(Boolean));
   const known = new Set(state.bookings.map((booking) => `${booking.listingTitle}|${booking.bookingDate}`));
   const imported: ProviderBookingRecord[] = customerBookings
+    .filter((booking) => ownIds.has(String(booking.listingId)) || ownTitles.has(booking.title.trim().toLowerCase()))
     .filter((booking) => !known.has(`${booking.title}|${booking.date}`))
     .map((booking) => ({
       id: booking.id,
@@ -572,8 +575,11 @@ export async function getProviderBookings(): Promise<ProviderBookingRecord[]> {
       notes: booking.note,
       createdAt: booking.createdAt
     }));
-  if (!imported.length) return state.bookings;
-  const bookings = [...imported, ...state.bookings];
+  const ownBookings = state.bookings.filter(
+    (booking) => ownIds.has(String(booking.listingId)) || ownTitles.has(booking.listingTitle.trim().toLowerCase())
+  );
+  if (!imported.length) return ownBookings;
+  const bookings = [...imported, ...ownBookings];
   await writeState({ ...state, bookings });
   return bookings;
 }

@@ -322,6 +322,19 @@ a.provider-flow__card {
   font-weight: 700;
 }
 
+.provider-location {
+  width: 100%;
+  text-align: left;
+  background: #303132;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .provider-panel input,
 .provider-panel select {
   background: #303132;

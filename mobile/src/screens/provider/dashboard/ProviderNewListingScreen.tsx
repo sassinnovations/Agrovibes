@@ -17,6 +17,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../../../theme/appColors";
 import { useAuth } from "../../../auth/AuthContext";
+import { LocationMapPicker } from "../../../components/LocationMapPicker";
 import {
   getProviderRegistrationStatus,
   submitListingForApproval,
@@ -1003,6 +1004,15 @@ export function ProviderNewListingScreen() {
   const [dailyRate, setDailyRate] = useState("");
   const [rateUnit, setRateUnit] = useState("Hour");
   const [serviceArea, setServiceArea] = useState("");
+  const [listingLabel, setListingLabel] = useState(user?.locationLabel?.trim() || "");
+  const [listingLat, setListingLat] = useState<number | null>(
+    Number.isFinite(Number(user?.locationLat)) ? Number(user?.locationLat) : null
+  );
+  const [listingLng, setListingLng] = useState<number | null>(
+    Number.isFinite(Number(user?.locationLng)) ? Number(user?.locationLng) : null
+  );
+  const [listingRadius, setListingRadius] = useState<"5" | "10">("10");
+  const [mapOpen, setMapOpen] = useState(false);
   const [securityDeposit, setSecurityDeposit] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
@@ -1297,20 +1307,18 @@ export function ProviderNewListingScreen() {
       );
       return;
     }
-    const locationLat = Number(user?.locationLat);
-    const locationLng = Number(user?.locationLng);
+    const locationLat = listingLat ?? Number(user?.locationLat);
+    const locationLng = listingLng ?? Number(user?.locationLng);
     if (!Number.isFinite(locationLat) || !Number.isFinite(locationLng)) {
       Alert.alert(
-        "Add your location",
-        "Set your location on your profile before posting. Farmers only see this listing within the 5–10 km area you choose."
+        "Add the listing location",
+        "Choose the place on the map. Farmers only see this listing inside the 5 or 10 km distance around that pin."
       );
       return;
     }
-    const postedRadius = Number(String(serviceArea).match(/(\d+(?:\.\d+)?)/)?.[1]);
-    const radiusKm = Number.isFinite(postedRadius) && postedRadius > 0 ? postedRadius : 10;
-    const locationLabel = isLand
-      ? [landTown, landDistrict].filter(Boolean).join(", ")
-      : user?.locationLabel || "";
+    const radiusKm = Number(listingRadius) || 10;
+    const locationLabel = listingLabel.trim()
+      || (isLand ? [landTown, landDistrict].filter(Boolean).join(", ") : user?.locationLabel || "");
     const listingTitle = equipmentName.trim() || selectedAssetMeta?.title || "Untitled listing";
     const listingCategory = selectedAssetMeta?.title || (isService ? "Service" : "Rental");
     const publishedRate = (dailyRate.trim() || (isMachinery ? priceHr.trim() : "")).replace(/,/g, "");
@@ -3307,6 +3315,26 @@ export function ProviderNewListingScreen() {
             )}
             <Text style={styles.reviewTitle}>{equipmentName || "Untitled listing"}</Text>
             <Text style={styles.reviewCategory}>{selectedAssetMeta?.title ?? "Farm Equipment"}</Text>
+            <Pressable style={styles.locationPick} onPress={() => setMapOpen(true)}>
+              <Ionicons name="location-sharp" size={18} color={APP_LIME} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locationKicker}>Listing location</Text>
+                <Text style={styles.locationValue} numberOfLines={2}>
+                  {listingLabel || "Choose on Google Maps"}
+                </Text>
+              </View>
+            </Pressable>
+            <View style={styles.radiusRow}>
+              {(["5", "10"] as const).map((km) => (
+                <Pressable
+                  key={km}
+                  style={[styles.radiusChip, listingRadius === km ? styles.radiusChipOn : null]}
+                  onPress={() => setListingRadius(km)}
+                >
+                  <Text style={[styles.radiusText, listingRadius === km ? styles.radiusTextOn : null]}>{km} km</Text>
+                </Pressable>
+              ))}
+            </View>
             {(isService
               ? description.trim() || farmersGet.trim()
               : description.trim()
@@ -3912,6 +3940,19 @@ export function ProviderNewListingScreen() {
         ) : null}
       </View>
       </View>
+      <LocationMapPicker
+        open={mapOpen}
+        label={listingLabel}
+        lat={listingLat}
+        lng={listingLng}
+        onClose={() => setMapOpen(false)}
+        onSelect={(value) => {
+          setListingLabel(value.label);
+          setListingLat(value.lat);
+          setListingLng(value.lng);
+          setMapOpen(false);
+        }}
+      />
     </View>
   );
 }
@@ -4372,6 +4413,29 @@ const styles = StyleSheet.create({
   reviewHeroEmpty: { alignItems: "center", justifyContent: "center" },
   reviewTitle: { color: APP_TEXT, fontSize: 18, fontWeight: "800", marginBottom: 4 },
   reviewCategory: { color: APP_LIME, fontSize: 13, fontWeight: "700", marginBottom: 10 },
+  locationPick: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: HAIRLINE,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10
+  },
+  locationKicker: { color: APP_TEXT_MUTED, fontSize: 11, fontWeight: "700" },
+  locationValue: { color: APP_TEXT, fontSize: 14, fontWeight: "700", marginTop: 2 },
+  radiusRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  radiusChip: {
+    borderWidth: 1,
+    borderColor: HAIRLINE,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8
+  },
+  radiusChipOn: { backgroundColor: APP_LIME, borderColor: APP_LIME },
+  radiusText: { color: APP_TEXT, fontSize: 13, fontWeight: "700" },
+  radiusTextOn: { color: "#111" },
   reviewDesc: { color: APP_TEXT_MUTED, fontSize: 13, lineHeight: 19, marginBottom: 12 },
   reviewDescMuted: { color: APP_TEXT_MUTED, fontSize: 13, fontStyle: "italic", marginBottom: 12 },
   viewDetailsBtn: {

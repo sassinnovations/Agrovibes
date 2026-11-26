@@ -137,6 +137,7 @@ export async function submitProviderListing(
 
 export type ProviderBooking = {
   id: number;
+  listingId?: string | null;
   title: string;
   category: string;
   location: string;
@@ -146,6 +147,8 @@ export type ProviderBooking = {
   createdAt: string;
   customerName: string;
   customerPhone: string;
+  amount?: number | string | null;
+  rateUnit?: string | null;
 };
 
 export async function fetchProviderBookings(token: string) {

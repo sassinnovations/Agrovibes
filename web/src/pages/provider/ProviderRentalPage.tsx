@@ -31,7 +31,7 @@ export function ProviderRentalPage() {
         fetchProviderBookings(token)
       ]);
       setStatus(kyc.status);
-      setListings((listed.listings || []).filter((row) => row.channel !== "Services" && row.channel !== "Educators"));
+      setListings((listed.listings || []).filter((row) => String(row.channel || "Rental").toLowerCase() === "rental"));
       setBookings(booked.bookings || []);
       setError("");
     } catch (err) {
@@ -109,7 +109,7 @@ export function ProviderRentalPage() {
                   {row.date || "Date not set"} · {row.location || "Location not set"}
                 </span>
                 {row.note ? <span>{row.note}</span> : null}
-                <em>Pending</em>
+                <em>{row.status ? row.status.charAt(0).toUpperCase() + row.status.slice(1) : "Pending"}</em>
               </article>
             ))}
           </div>
@@ -117,15 +117,18 @@ export function ProviderRentalPage() {
       ) : null}
 
       {tab === "payments" ? (
-        listings.length === 0 ? (
-          <p>Listing rates appear here after you set a price.</p>
+        bookings.length === 0 ? (
+          <p>Payments for your bookings will appear here.</p>
         ) : (
           <div className="provider-list">
-            {listings.map((row) => {
-              const amount = Number(String(row.dailyRate ?? "").replace(/[^0-9.]/g, ""));
+            {bookings.map((row) => {
+              const amount = Number(String(row.amount ?? "").replace(/[^0-9.]/g, ""));
               return (
                 <article key={row.id} className="provider-card">
                   <strong>{row.title}</strong>
+                  <span>
+                    {row.customerName || "Customer"} · {row.date || "Date not set"}
+                  </span>
                   <em>{amount > 0 ? `₹${Math.round(amount).toLocaleString("en-IN")}${row.rateUnit ? ` / ${row.rateUnit}` : ""}` : "Rate not set"}</em>
                 </article>
               );
