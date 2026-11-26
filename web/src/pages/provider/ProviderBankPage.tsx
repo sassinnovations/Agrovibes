@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { createProviderRazorpayAccount, fetchProviderKycStatus, verifyProviderBankAccount } from "../../api/providerKyc";
+import { fetchProviderKycStatus, verifyProviderBankAccount } from "../../api/providerKyc";
 import { readProviderDraft } from "./providerDraft";
 
 const BANK_KEY = "cropvibe.provider.bank.v2";
@@ -11,6 +11,8 @@ export type SavedBank = {
   holderName: string;
   accountNumber: string;
   ifsc: string;
+  bankName?: string;
+  bankBranch?: string;
   razorpayAccountId?: string;
 };
 
@@ -26,9 +28,15 @@ export function readSavedBank(): SavedBank | null {
   }
 }
 
+export function writeSavedBank(bank: SavedBank) {
+  sessionStorage.setItem(BANK_KEY, JSON.stringify(bank));
+}
+
 export function ProviderBankPage() {
   const { token } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const editing = params.get("edit") === "1";
   const [savedBank, setSavedBank] = useState<SavedBank | null>(() => readSavedBank());
   const [approved, setApproved] = useState(false);
   const [ready, setReady] = useState(false);
@@ -41,7 +49,11 @@ export function ProviderBankPage() {
   const [ifscDetails, setIfscDetails] = useState(true);
   const [bankName, setBankName] = useState("");
   const [bankBranch, setBankBranch] = useState("");
-  const [pin, setPin] = useState("");
+
+  useEffect(() => {
+    if (!savedBank || editing || savedBank.razorpayAccountId) return;
+    navigate("/provider/razorpay", { replace: true });
+  }, [editing, navigate, savedBank]);
 
   useEffect(() => {
     if (!token) return;
@@ -115,39 +127,13 @@ export function ProviderBankPage() {
         holderName: result.holderName,
         accountNumber: accountDigits,
         ifsc: ifscCode,
+        bankName: result.bankName || bankName,
+        bankBranch: result.bankBranch || bankBranch,
         razorpayAccountId: savedBank?.razorpayAccountId
       };
-      const street = draft.street || draft.village;
-      const city = draft.district || draft.village;
-      if (draft.email && street && city && draft.state && pin.replace(/\D/g, "").length === 6) {
-        const linked = await createProviderRazorpayAccount(token, {
-          accountNumber: accountDigits,
-          ifsc: ifscCode,
-          holderName: result.holderName,
-          email: draft.email,
-          phone: draft.phone,
-          businessName: draft.businessName || draft.fullName || result.holderName,
-          street,
-          city,
-          state: draft.state,
-          postalCode: pin.replace(/\D/g, "")
-        });
-        if (!linked.linked || !linked.accountId) {
-          sessionStorage.setItem(BANK_KEY, JSON.stringify(next));
-          setSavedBank(next);
-          setError(linked.message || "The bank account was verified. Razorpay did not link an account yet.");
-          return;
-        }
-        next.razorpayAccountId = linked.accountId;
-      } else if (!next.razorpayAccountId) {
-        sessionStorage.setItem(BANK_KEY, JSON.stringify(next));
-        setSavedBank(next);
-        setError("Bank account verified. Add the 6-digit PIN from your address so Razorpay can finish onboarding.");
-        return;
-      }
-      sessionStorage.setItem(BANK_KEY, JSON.stringify(next));
+      writeSavedBank(next);
       setSavedBank(next);
-      navigate("/provider");
+      navigate("/provider/razorpay");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not verify the bank account.");
     } finally {
@@ -199,10 +185,6 @@ export function ProviderBankPage() {
               {bankBranch ? ` · ${bankBranch}` : ""}
             </p>
           ) : null}
-          <label>
-            PIN code
-            <input value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit PIN for Razorpay" inputMode="numeric" />
-          </label>
           {error ? <p className="provider-bank__error">{error}</p> : null}
           <button type="submit" disabled={busy || !formReady}>
             {busy ? "Verifying…" : "Verify & Save Bank Account"}

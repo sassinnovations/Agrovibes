@@ -64,10 +64,11 @@ export function ProviderOverviewPage() {
     <section className="provider-flow">
       {steps.map((step, index) => {
         const openBank = canAddBank && step.title.startsWith("Add Bank Account");
+        const bankTo = bankReady ? "/provider/razorpay" : "/provider/bank";
         return (
           <div key={step.title}>
             {openBank ? (
-              <Link to="/provider/bank" className="provider-flow__card">
+              <Link to={bankTo} className="provider-flow__card">
                 <strong>{step.title}</strong>
                 <span>{step.detail}</span>
               </Link>
