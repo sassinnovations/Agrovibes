@@ -1042,6 +1042,26 @@ export async function fetchProviderListings(token: string) {
   };
 }
 
+export async function fetchProviderBookings(token: string) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/bookings`, token)) as {
+    bookings: Array<{
+      id: number;
+      listingId?: string | null;
+      title: string;
+      category: string;
+      location: string;
+      date: string;
+      note: string;
+      status: string;
+      createdAt: string;
+      customerName: string;
+      customerPhone: string;
+      amount?: number | string | null;
+      rateUnit?: string | null;
+    }>;
+  };
+}
+
 export async function submitRentalBooking(
   token: string,
   payload: { listingId: string; title: string; category: string; location: string; date: string; note: string }

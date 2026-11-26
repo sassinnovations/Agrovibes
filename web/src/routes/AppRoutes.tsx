@@ -28,6 +28,7 @@ import { AdminReportsPage } from "../pages/AdminReportsPage";
 import { JoinProviderPage } from "../pages/provider/JoinProviderPage";
 import { ProviderDashboard } from "../pages/provider/ProviderDashboard";
 import { ProviderBankPage } from "../pages/provider/ProviderBankPage";
+import { ProviderRazorpayPage } from "../pages/provider/ProviderRazorpayPage";
 import { RequireProviderBank } from "../pages/provider/RequireProviderBank";
 import { ProviderOverviewPage } from "../pages/provider/ProviderOverviewPage";
 import { ProviderRentalPage } from "../pages/provider/ProviderRentalPage";
@@ -107,6 +108,7 @@ export function AppRoutes() {
         <Route path="provider" element={<ProviderDashboard />}>
           <Route index element={<ProviderOverviewPage />} />
           <Route path="bank" element={<ProviderBankPage />} />
+          <Route path="razorpay" element={<ProviderRazorpayPage />} />
           <Route path="rental" element={<ProviderRentalPage />} />
           <Route element={<RequireProviderBank />}>
             <Route path="listings" element={<ProviderListingsPage />} />

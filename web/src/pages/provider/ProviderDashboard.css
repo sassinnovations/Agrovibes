@@ -143,7 +143,22 @@ a.provider-flow__card {
   font-size: 13px;
 }
 
-.provider-bank__error {
+.provider-bank__readonly {
+  display: block;
+  background: #2c2c2c;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 12px 14px;
+  font-weight: 600;
+}
+
+.provider-bank__change {
+  color: #c9ff35;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
   margin: 0;
   color: #b42318;
   font-size: 13px;
@@ -305,6 +320,19 @@ a.provider-flow__card {
   margin: 12px 0;
   font-size: 13px;
   font-weight: 700;
+}
+
+.provider-location {
+  width: 100%;
+  text-align: left;
+  background: #303132;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .provider-panel input,
