@@ -46,9 +46,18 @@ export function ProviderBankDetailsScreen() {
   const [nameLoading, setNameLoading] = useState(false);
   const [nameHint, setNameHint] = useState<string | null>(null);
   const [bankVerified, setBankVerified] = useState(false);
+  const [ifscDetails, setIfscDetails] = useState(true);
   const ifscTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const payouts = route.params?.purpose === "payouts";
+
+  const leaveBank = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate("ProviderMain", { screen: "Overview" });
+  }, [navigation]);
   const accountDigits = accountNumber.replace(/\D/g, "");
   const confirmDigits = confirmAccount.replace(/\D/g, "");
   const ifscCode = ifsc.trim().toUpperCase();
@@ -107,7 +116,7 @@ export function ProviderBankDetailsScreen() {
       const result = await verifyProviderBankAccount(token, {
         accountNumber: accountDigits,
         ifsc: ifscCode,
-        ifscDetails: true,
+        ifscDetails,
         applicantName: draft?.fullName || "Provider",
         role: track,
         registrationType,
@@ -117,6 +126,8 @@ export function ProviderBankDetailsScreen() {
         phone: draft?.phone,
         address
       });
+      if (result.bankName) setBankName(result.bankName);
+      if (result.bankBranch) setBankBranch(result.bankBranch);
       const typed = holderName.trim().toLowerCase();
       const returned = String(result.holderName || "").trim().toLowerCase();
       const nameAgrees = !payouts || !typed || !returned || returned.includes(typed) || typed.includes(returned);
@@ -145,7 +156,7 @@ export function ProviderBankDetailsScreen() {
     } finally {
       setNameLoading(false);
     }
-  }, [accountDigits, holderName, ifscCode, ifscFormatOk, nameLoading, navigation, payouts, token]);
+  }, [accountDigits, holderName, ifscCode, ifscDetails, ifscFormatOk, nameLoading, navigation, payouts, registrationType, token, track]);
 
   useEffect(() => {
     if (ifscTimer.current) clearTimeout(ifscTimer.current);
@@ -196,7 +207,7 @@ export function ProviderBankDetailsScreen() {
 
   return (
     <SafeAreaView style={pf.screen} edges={["top", "bottom"]}>
-      <ProviderFormHeader onBack={() => navigation.goBack()} />
+      <ProviderFormHeader onBack={leaveBank} />
       {payouts ? (
         <Text style={[pf.sectionTitle, { paddingHorizontal: 16, paddingTop: 8 }]}>Add Bank Account</Text>
       ) : (
@@ -299,6 +310,18 @@ export function ProviderBankDetailsScreen() {
         ) : null}
 
         <Pressable
+          style={styles.checkRow}
+          onPress={() => setIfscDetails((on) => !on)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: ifscDetails }}
+        >
+          <View style={[styles.checkBox, ifscDetails ? styles.checkBoxOn : null]}>
+            {ifscDetails ? <Text style={styles.checkMark}>✓</Text> : null}
+          </View>
+          <Text style={styles.checkLabel}>IFSC Details</Text>
+        </Pressable>
+
+        <Pressable
           style={[styles.verifyBtn, (accountDigits.length < 6 || !ifscFormatOk || nameLoading) && styles.verifyBtnDisabled]}
           disabled={accountDigits.length < 6 || !ifscFormatOk || nameLoading}
           onPress={() => {
@@ -391,6 +414,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginTop: 2
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12
+  },
+  checkBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.4)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  checkBoxOn: {
+    backgroundColor: APP_LIME,
+    borderColor: APP_LIME
+  },
+  checkMark: {
+    color: "#111",
+    fontSize: 13,
+    fontWeight: "800"
+  },
+  checkLabel: {
+    color: PROVIDER_TEXT,
+    fontSize: 14,
+    fontWeight: "700"
   },
   verifyBtn: {
     backgroundColor: APP_LIME,

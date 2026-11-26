@@ -969,7 +969,15 @@ export async function verifyProviderBankAccount(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  })) as { holderName: string; aadhaarName: string; matched: boolean; ifsc: string; submitted?: boolean };
+  })) as {
+    holderName: string;
+    aadhaarName: string;
+    matched: boolean;
+    ifsc: string;
+    bankName?: string;
+    bankBranch?: string;
+    submitted?: boolean;
+  };
 }
 
 export async function sendProviderKycOtp(token: string, aadhaar: string, notifyPhone?: string) {
@@ -988,14 +996,29 @@ export async function verifyProviderKycOtp(token: string, aadhaar: string, code:
   })) as { success: boolean; aadhaarLast4: string };
 }
 
-export async function fetchRentalListings(token?: string | null) {
-  return (await fetchWithAuth(`${API_BASE_URL}/v1/rentals/listings`, token ?? null)) as {
+export async function fetchRentalListings(
+  token?: string | null,
+  near?: { lat?: number | null; lng?: number | null }
+) {
+  const params = new URLSearchParams();
+  if (Number.isFinite(Number(near?.lat)) && Number.isFinite(Number(near?.lng))) {
+    params.set("lat", String(near?.lat));
+    params.set("lng", String(near?.lng));
+  }
+  const query = params.toString();
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/rentals/listings${query ? `?${query}` : ""}`, token ?? null)) as {
     listings: Array<{
       id: number;
       title: string;
       category: string;
       channel: string;
       status: string;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
+      locationLabel?: string | null;
+      radiusKm?: number | string | null;
+      distanceKm?: number | string | null;
       createdAt: string;
       providerName: string;
     }>;
@@ -1011,7 +1034,30 @@ export async function fetchProviderListings(token: string) {
       channel: string;
       status: string;
       rcNumber?: string | null;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
       createdAt: string;
+    }>;
+  };
+}
+
+export async function fetchProviderBookings(token: string) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/bookings`, token)) as {
+    bookings: Array<{
+      id: number;
+      listingId?: string | null;
+      title: string;
+      category: string;
+      location: string;
+      date: string;
+      note: string;
+      status: string;
+      createdAt: string;
+      customerName: string;
+      customerPhone: string;
+      amount?: number | string | null;
+      rateUnit?: string | null;
     }>;
   };
 }
@@ -1027,15 +1073,51 @@ export async function submitRentalBooking(
   })) as { booking: { id: number } };
 }
 
+export async function updateProviderListing(
+  token: string,
+  listingId: string | number,
+  payload: { imageUrl?: string; dailyRate?: string | number; rateUnit?: string }
+) {
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings/${listingId}`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  })) as { listing: { id: number; imageUrl?: string | null; dailyRate?: number | string | null; rateUnit?: string | null } };
+}
+
 export async function submitProviderListing(
   token: string,
-  payload: { title: string; category: string; channel: string; rcNumber?: string }
+  payload: {
+    title: string;
+    category: string;
+    channel: string;
+    rcNumber?: string;
+    imageUrl?: string;
+    dailyRate?: string | number;
+    rateUnit?: string;
+    locationLabel?: string;
+    locationLat?: number;
+    locationLng?: number;
+    radiusKm?: number;
+  }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  })) as { listing: { id: number; title: string; category: string; channel: string; status: string; createdAt: string } };
+  })) as {
+    listing: {
+      id: number;
+      title: string;
+      category: string;
+      channel: string;
+      status: string;
+      imageUrl?: string | null;
+      dailyRate?: number | string | null;
+      rateUnit?: string | null;
+      createdAt: string;
+    };
+  };
 }
 
 export async function submitProviderKyc(

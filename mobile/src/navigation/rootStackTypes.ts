@@ -32,7 +32,7 @@ export type RootStackParamList = {
   ExpertVerification: undefined;
   SecurityVerification: undefined;
   Main: NavigatorScreenParams<MainTabParamList> | undefined;
-  ProviderMain: undefined;
+  ProviderMain: { screen?: "Overview" | "Rental" | "Listing" | "Services" | "Profile" } | undefined;
   ProviderNewListing: undefined;
   ProviderTractor: undefined;
   ProviderPayouts: undefined;
@@ -40,7 +40,7 @@ export type RootStackParamList = {
   EditProfile: undefined;
   Weather: undefined;
   DiscoverSearch: undefined;
-  RentalCategory: { categoryId: string; location: string };
+  RentalCategory: { categoryId: string; location: string; lat?: number; lng?: number };
   RentalBooking: { listingId: string; title: string; category: string; location: string };
   RentalCart: { location?: string } | undefined;
   PlantHealth: undefined;

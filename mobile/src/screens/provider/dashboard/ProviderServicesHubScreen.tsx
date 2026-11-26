@@ -55,7 +55,7 @@ export function ProviderServicesHubScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
-  list: { padding: 16, paddingBottom: 120, gap: 12 },
+  list: { padding: 16, paddingBottom: 32, gap: 12 },
   card: { backgroundColor: CARD, borderRadius: 12, padding: 14 },
   title: { color: APP_TEXT, fontSize: 16, fontWeight: "800" },
   meta: { color: APP_TEXT_MUTED, fontSize: 12, marginTop: 4 },

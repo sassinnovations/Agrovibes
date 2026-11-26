@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Image, type ImageSourcePropType, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../auth/AuthContext";
 import type { RootStackParamList } from "../../navigation/rootStackTypes";
@@ -20,6 +20,15 @@ const SIDE_CARD_H = 88;
 const SIDEBAR_W = 16 + SIDE_CARD_W + 10;
 const TILE_BG = "#303132";
 
+function listingImageUrl(item: RentalCatalogItem) {
+  const source = item.image;
+  if (source && typeof source === "object" && "uri" in source && typeof source.uri === "string") {
+    const uri = source.uri.trim();
+    return uri || undefined;
+  }
+  return undefined;
+}
+
 function rememberCartItem(item: RentalCatalogItem, categoryTitle: string) {
   return addRentalCartLine({
     listingId: item.id,
@@ -29,8 +38,14 @@ function rememberCartItem(item: RentalCatalogItem, categoryTitle: string) {
     quantity: 1,
     unitPrice: item.price,
     unitLabel: item.unitLabel,
-    mrp: item.mrp
+    mrp: item.mrp,
+    imageUrl: listingImageUrl(item)
   });
+}
+
+function rentalImageFit(source: ImageSourcePropType): "cover" | "contain" {
+  if (source && typeof source === "object" && "uri" in source && source.uri) return "cover";
+  return "contain";
 }
 
 function rupee(n: number) {
@@ -39,6 +54,7 @@ function rupee(n: number) {
 
 function unitPrice(item: RentalCatalogItem) {
   if (item.price <= 0) return "Rate on request";
+  if (item.reviewLabel === "New") return `${rupee(item.price)}/${item.unitLabel}`;
   return `${rupee(Math.max(1, Math.round(item.price / 10)))}/${item.unitLabel}`;
 }
 
@@ -48,16 +64,26 @@ function liveListingToCatalog(row: {
   category: string;
   channel: string;
   providerName?: string;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
+  locationLabel?: string | null;
+  distanceKm?: number | string | null;
 }): RentalCatalogItem {
   const categoryId = portalCategoryForListing(row.category, row.title);
   const cover = RENTAL_CATALOG_SUBS[categoryId]?.[0];
   const provider = row.providerName?.trim();
+  const distance = Number(row.distanceKm);
+  const place = row.locationLabel?.trim();
+  const away = Number.isFinite(distance) ? `${distance} km away` : "";
+  const price = Number(String(row.dailyRate ?? "").replace(/[^0-9.]/g, "")) || 0;
+  const uploaded = String(row.imageUrl || "").trim();
   return {
     id: String(row.id),
     categoryId,
     subCategoryId: cover?.id ?? "all",
     title: row.title,
-    subtitle: [row.category, row.channel, provider].filter(Boolean).join(" · "),
+    subtitle: [row.category, row.channel, provider, place, away].filter(Boolean).join(" · "),
     detail: `${row.title} is an approved Cropvibe listing.`,
     rating: 0,
     reviewLabel: "New",
@@ -65,19 +91,21 @@ function liveListingToCatalog(row: {
     tag: "Approved",
     options: ["Book"],
     discountPct: 0,
-    price: 0,
-    mrp: 0,
-    unitLabel: "Booking",
-    image: cover?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image
+    price,
+    mrp: price,
+    unitLabel: row.rateUnit || "Booking",
+    image: uploaded ? { uri: uploaded } : cover?.image ?? RENTAL_CATALOG_SUBS.machinery[0].image
   };
 }
 
 export function RentalCategoryScreen() {
   useAndroidNestedStackBack();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "RentalCategory">>();
   const location = route.params?.location || "Telangana";
+  const nearLat = Number.isFinite(Number(route.params?.lat)) ? Number(route.params?.lat) : Number(user?.locationLat);
+  const nearLng = Number.isFinite(Number(route.params?.lng)) ? Number(route.params?.lng) : Number(user?.locationLng);
   const category = rentalCategoryById(route.params?.categoryId || "");
   const { width } = useWindowDimensions();
   const subs = category ? RENTAL_CATALOG_SUBS[category.id] ?? [] : [];
@@ -92,7 +120,7 @@ export function RentalCategoryScreen() {
     useCallback(() => {
       let active = true;
       setLoadingLive(true);
-      void fetchRentalListings(token)
+      void fetchRentalListings(token, { lat: nearLat, lng: nearLng })
         .then((data) => {
           if (!active) return;
           const approved = (data.listings || []).filter((row) => String(row.status || "").toLowerCase() === "approved");
@@ -107,7 +135,7 @@ export function RentalCategoryScreen() {
       return () => {
         active = false;
       };
-    }, [token])
+    }, [nearLat, nearLng, token])
   );
 
   useEffect(() => {
@@ -149,7 +177,8 @@ export function RentalCategoryScreen() {
       quantity: count,
       unitPrice: item.price,
       unitLabel: item.unitLabel,
-      mrp: item.mrp
+      mrp: item.mrp,
+      imageUrl: listingImageUrl(item)
     }).then(() => {
       setSelected(null);
       navigateToRentalCart(location);
@@ -172,8 +201,8 @@ export function RentalCategoryScreen() {
           {RENTAL_CATEGORIES.map((item) => {
             const cover = RENTAL_CATALOG_SUBS[item.id]?.[0];
             return (
-              <Pressable key={item.id} style={styles.allRow} onPress={() => navigateToRentalCategory(item.id, location)}>
-                {cover ? <Image source={cover.image} style={styles.allImage} resizeMode="cover" /> : null}
+              <Pressable key={item.id} style={styles.allRow} onPress={() => navigateToRentalCategory(item.id, location, { lat: nearLat, lng: nearLng })}>
+                {cover ? <Image source={cover.image} style={styles.allImage} resizeMode="contain" /> : null}
                 <View style={styles.allText}>
                   <Text style={styles.allTitle}>{item.title}</Text>
                   <Text style={styles.allBlurb}>{item.blurb}</Text>
@@ -271,7 +300,7 @@ function RentalCard({
   return (
     <Pressable style={styles.card} onPress={onOpen}>
       <View style={styles.media}>
-        <Image source={item.image} style={styles.mediaImage} resizeMode="cover" />
+        <Image source={item.image} style={styles.mediaImage} resizeMode={rentalImageFit(item.image)} />
         <Pressable style={styles.addBtn} onPress={onAdd} accessibilityLabel="Add">
           <Ionicons name="add" size={22} color={APP_TEXT_ON_LIME} />
         </Pressable>
@@ -349,7 +378,7 @@ function RentalSheet({
         <Pressable style={styles.sheetDismiss} onPress={onClose} />
         {item ? (
           <View style={styles.sheet}>
-            <Image source={item.image} style={styles.sheetImage} resizeMode="cover" />
+            <Image source={item.image} style={styles.sheetImage} resizeMode={rentalImageFit(item.image)} />
             <View style={styles.sheetTools}>
               <Pressable style={styles.sheetIconBtn} onPress={onClose} accessibilityLabel="Back">
                 <Ionicons name="chevron-back" size={22} color={APP_TEXT} />
@@ -438,7 +467,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 10
   },
-  allImage: { width: 64, height: 64, borderRadius: 10 },
+  allImage: { width: 64, height: 64, borderRadius: 10, backgroundColor: "#173024" },
   allText: { flex: 1 },
   allTitle: { color: APP_TEXT, fontSize: 15, fontWeight: "800" },
   allBlurb: { color: APP_TEXT_MUTED, fontSize: 12, lineHeight: 17, marginTop: 2 },

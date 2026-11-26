@@ -4,15 +4,35 @@ const { query } = require("./db");
 let identityReady = false;
 
 const SUREPASS_PRODUCTION_BASE = "https://kyc-api.surepass.io";
+const SUREPASS_HOSTS = [
+  "https://kyc-api.surepass.io",
+  "https://sandbox.surepass.io",
+  "https://kyc-api.surepass.app",
+  "https://sandbox.surepass.app"
+];
+let surepassHostThatWorked = "";
 
 function surepassBase() {
+  if (surepassHostThatWorked) return surepassHostThatWorked;
   const configured = String(process.env.SUREPASS_BASE_URL || "").trim().replace(/\/$/, "");
-  // A production token is rejected on kyc-api.surepass.app. Surepass requires kyc-api.surepass.io.
   if (configured === "https://kyc-api.surepass.app") return SUREPASS_PRODUCTION_BASE;
   if (configured) return configured;
   const env = String(process.env.SUREPASS_ENV || "").trim().toLowerCase();
   if (env === "sandbox" || env === "test") return "https://sandbox.surepass.io";
   return SUREPASS_PRODUCTION_BASE;
+}
+
+function surepassHostOrder() {
+  const hosts = [surepassBase()];
+  for (const host of SUREPASS_HOSTS) {
+    if (!hosts.includes(host)) hosts.push(host);
+  }
+  return hosts;
+}
+
+function surepassTokenRejected(payload) {
+  const message = String(payload?.message || payload?.data?.message || "");
+  return /token\(signature\) is invalid/i.test(message);
 }
 
 function surepassToken() {
@@ -152,28 +172,72 @@ async function ensureProviderKycIdentity() {
   identityReady = true;
 }
 
-async function surepassRequest(path, body) {
+async function surepassFetch(path, { method = "POST", body } = {}) {
   const token = surepassToken();
   if (!token) {
     const error = new Error("Surepass is not configured");
     error.status = 503;
     throw error;
   }
+  let last = null;
+  for (const host of surepassHostOrder()) {
+    let response;
+    try {
+      response = await fetch(`${host}${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {})
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(25000)
+      });
+    } catch {
+      continue;
+    }
+    const payload = await response.json().catch(() => null);
+    last = { response, payload, host };
+    if (!surepassTokenRejected(payload)) {
+      surepassHostThatWorked = host;
+      return last;
+    }
+  }
+  if (!last) throw providerError("Surepass did not respond. Try again in a moment.", 504);
+  return last;
+}
+
+async function surepassRequest(path, body) {
+  const { response, payload } = await surepassFetch(path, { method: "POST", body });
+  return { response, payload };
+}
+
+const SUREPASS_BANK_VERIFICATION_URL = "https://kyc-api.surepass.app/api/v1/bank-verification";
+
+async function surepassBankVerification(body) {
+  const token = surepassToken();
+  if (!token) {
+    throw providerError("Bank verification is not configured. Add SUREPASS_TOKEN for the production Surepass bank API.", 503);
+  }
   let response;
   try {
-    response = await fetch(`${surepassBase()}${path}`, {
+    response = await fetch(SUREPASS_BANK_VERIFICATION_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
+        Accept: "application/json",
         "Content-Type": "application/json"
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(25000)
     });
   } catch {
-    throw providerError("Surepass did not respond. Try again in a moment.", 504);
+    return surepassRequest("/api/v1/bank-verification", body);
   }
   const payload = await response.json().catch(() => null);
+  if (surepassTokenRejected(payload)) {
+    return surepassRequest("/api/v1/bank-verification", body);
+  }
   return { response, payload };
 }
 
@@ -348,13 +412,11 @@ async function setDigilockerKycStatus(userId, sessionId, status, message) {
 }
 
 async function pullSurepassDigilockerStatus(clientId) {
-  const token = surepassToken();
-  const response = await fetch(
-    `${surepassBase()}/api/v1/digilocker/status/${encodeURIComponent(clientId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const { response, payload } = await surepassFetch(
+    `/api/v1/digilocker/status/${encodeURIComponent(clientId)}`,
+    { method: "GET" }
   );
   if (response.status === 404) return { state: "unknown" };
-  const payload = await response.json().catch(() => null);
   if (!response.ok) return { state: "pending" };
   const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
   const raw = String(data.status || data.state || "").toLowerCase();
@@ -619,12 +681,10 @@ async function pullSurepassAadhaar(clientId) {
   if (posted.response.ok && posted.payload?.success !== false) {
     return pickAadhaarProfile(posted.payload);
   }
-  const token = surepassToken();
-  const response = await fetch(
-    `${surepassBase()}/api/v1/digilocker/download-aadhaar/${encodeURIComponent(clientId)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+  const { response, payload } = await surepassFetch(
+    `/api/v1/digilocker/download-aadhaar/${encodeURIComponent(clientId)}`,
+    { method: "GET" }
   );
-  const payload = await response.json().catch(() => null);
   if (!response.ok || payload?.success === false) return null;
   return pickAadhaarProfile(payload);
 }
@@ -888,10 +948,17 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
   const includeIfscDetails = ifscDetails !== false;
   if (account.length < 6) throw providerError("Enter a valid account number.", 400);
   if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) throw providerError("Enter a valid IFSC.", 400);
-  const identity = await requireAadhaarIdentity(userId);
-  if (!identity?.aadhaarName) {
-    throw providerError("Verify Aadhaar with DigiLocker before the bank account.", 400);
-  }
+  await ensureProviderKycIdentity();
+  const identityRows = await query(
+    `
+    SELECT aadhaar_name AS "aadhaarName"
+    FROM provider_kyc_identity
+    WHERE user_id = $1 AND NULLIF(TRIM(aadhaar_name), '') IS NOT NULL
+    LIMIT 1
+    `,
+    [userId]
+  );
+  const identity = identityRows.rows[0] || null;
   const provider = surepassToken() ? "surepass" : activeKycProvider();
   if (!provider || (provider === "sandbox" && !sandboxConfigured())) {
     throw providerError("Bank verification is not configured. Add SUREPASS_TOKEN for the production Surepass bank API.", 503);
@@ -926,12 +993,7 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
     }
   } else if (provider === "surepass") {
     const body = { id_number: account, ifsc: code, ifsc_details: includeIfscDetails };
-    const paths = ["/api/v1/bank-verification"];
-    let result = null;
-    for (const path of paths) {
-      result = await surepassRequest(path, body);
-      if (!surepassScopeMiss(result.response, result.payload)) break;
-    }
+    const result = await surepassBankVerification(body);
     const data = result?.payload?.data || {};
     const details = data.ifsc_details && typeof data.ifsc_details === "object" ? data.ifsc_details : {};
     holderName = String(
@@ -962,23 +1024,26 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
     }
   }
 
-  const matched = namesMatch(identity.aadhaarName, holderName);
+  const matched = identity?.aadhaarName ? namesMatch(identity.aadhaarName, holderName) : Boolean(holderName);
   await query(
     `
-    UPDATE provider_kyc_identity
-    SET bank_last4 = $2,
-        bank_ifsc = $3,
-        bank_holder_name = $4,
-        bank_matched = $5,
-        bank_verified_at = NOW(),
-        updated_at = NOW()
-    WHERE user_id = $1
+    INSERT INTO provider_kyc_identity (
+      user_id, bank_last4, bank_ifsc, bank_holder_name, bank_matched, bank_verified_at, updated_at
+    )
+    VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+    ON CONFLICT (user_id) DO UPDATE SET
+      bank_last4 = EXCLUDED.bank_last4,
+      bank_ifsc = EXCLUDED.bank_ifsc,
+      bank_holder_name = EXCLUDED.bank_holder_name,
+      bank_matched = EXCLUDED.bank_matched,
+      bank_verified_at = NOW(),
+      updated_at = NOW()
     `,
     [userId, account.slice(-4), code, holderName, matched]
   );
   return {
     holderName,
-    aadhaarName: identity.aadhaarName,
+    aadhaarName: identity?.aadhaarName || "",
     matched,
     ifsc: code,
     bankName,

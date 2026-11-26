@@ -86,7 +86,7 @@ function NavIcon({ name }: { name: NavIconName }) {
 
 const PROVIDER_NAV = [
   { to: "/provider", label: "Overview", end: true, icon: "overview" },
-  { to: "/provider/rental", label: "Rentals", end: false, icon: "rentals" },
+  { to: "/provider/rental", label: "Rental", end: false, icon: "rentals" },
   { to: "/provider/listings/new", label: "Create", end: true, icon: "create" },
   { to: "/provider/listings", label: "Listing", end: true, icon: "listing" },
   { to: "/provider/services", label: "Services", end: false, icon: "services" },
@@ -142,7 +142,7 @@ function ProviderSidebar() {
   const { signOut } = useAuth();
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar sidebar--open">
       <div className="sidebar__inner">
         <NavLink to="/" className="sidebar__logo" title="Cropvibe feed">
           <img src="/cropvibefavicon.png" alt="" className="sidebar__logo-icon" />

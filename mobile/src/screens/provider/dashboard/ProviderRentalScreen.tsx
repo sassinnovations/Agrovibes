@@ -14,13 +14,13 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ProviderChromeHeader } from "./ProviderChrome";
 import { APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../../../theme/appColors";
 import { useAuth } from "../../../auth/AuthContext";
+import { fetchProviderBookings } from "../../../services/api";
 import {
   getProviderBookings,
   getProviderListings,
   uploadLocalListings,
   type ProviderListingRecord
 } from "../../../services/providerWorkflow";
-import { uploadCustomerBookings } from "../../rental/customerRentalBookings";
 
 const COVER_TRACTOR = require("../../../../assets/market/tractor-rental.png");
 const COVER_EQUIPMENT = require("../../../../assets/market/new-equiptment.png");
@@ -42,7 +42,7 @@ function coverFor(title: string, category: string, imageUri?: string): ImageSour
   if (text.includes("transplant") || text.includes("paddy") || text.includes("land")) return COVER_CROP;
   if (text.includes("warehouse") || text.includes("storage")) return COVER_STORE;
   if (text.includes("used")) return COVER_USED;
-  if (text.includes("tool") || text.includes("equipment") || text.includes("rotavat")) return COVER_EQUIPMENT;
+  if (text.includes("pump") || text.includes("tool") || text.includes("equipment") || text.includes("rotavat") || text.includes("sprayer")) return COVER_EQUIPMENT;
   return COVER_TRACTOR;
 }
 
@@ -72,7 +72,7 @@ const RENTAL_TABS: Array<{
 ];
 
 const LISTING_TYPE_OPTIONS = ["All", "Equipment", "Machinery", "Drivers", "Labors", "Land", "Warehouse"] as const;
-const STATUS_OPTIONS = ["All", "Available", "Waiting for approval", "Booked", "Under Maintenance", "Inactive"] as const;
+const STATUS_OPTIONS = ["All", "Available", "Waiting for approval", "Rejected", "Booked", "Under Maintenance", "Inactive"] as const;
 const LOCATION_OPTIONS = ["All", "Hyderabad", "Vijayawada", "Guntur", "Warangal"] as const;
 
 const INVENTORY_FILTER_CONFIG: Array<FilterConfigItem<InventoryFilterKey>> = [
@@ -123,6 +123,8 @@ type Booking = {
   requestedOn: string;
   notes: string;
   imageUri?: string;
+  amount?: number;
+  rateUnit?: string;
 };
 type InventoryFilters = Record<InventoryFilterKey, string>;
 type BookingFilters = Record<BookingFilterKey, string>;
@@ -389,14 +391,28 @@ function matchesBookingFilters(booking: Booking, filters: BookingFilters) {
   return true;
 }
 
-function listingTypeFor(category: string) {
-  const text = category.toLowerCase();
+function listingTypeFor(category: string, title = "") {
+  const text = `${category} ${title}`.toLowerCase();
   if (text.includes("driver")) return "Drivers";
   if (text.includes("labo")) return "Labors";
-  if (text.includes("land")) return "Land";
+  if (text.includes("land") || text.includes("farmland") || text.includes("acre")) return "Land";
   if (text.includes("warehouse")) return "Warehouse";
-  if (text.includes("machin")) return "Machinery";
+  if (text.includes("machin") || text.includes("tractor") || text.includes("pump")) return "Machinery";
   return "Equipment";
+}
+
+function bookingStatusLabel(status?: string) {
+  const value = String(status || "pending").trim().toLowerCase();
+  if (value === "approved") return "Approved";
+  if (value === "rejected") return "Rejected";
+  if (value === "completed") return "Completed";
+  return "Pending";
+}
+
+function moneyLabel(amount?: number, unit?: string) {
+  if (!amount || amount <= 0) return "Rate not set";
+  const value = `₹${Math.round(amount).toLocaleString("en-IN")}`;
+  return unit ? `${value} / ${unit}` : value;
 }
 
 function toInventoryListing(row: ProviderListingRecord): Listing {
@@ -406,7 +422,7 @@ function toInventoryListing(row: ProviderListingRecord): Listing {
     : row.status === "approved"
       ? "Available"
       : row.status === "rejected"
-        ? "Inactive"
+        ? "Rejected"
         : "Waiting for approval";
   return {
     id: row.id,
@@ -414,13 +430,13 @@ function toInventoryListing(row: ProviderListingRecord): Listing {
     category: row.category,
     location: "Your listing",
     status,
-    listingType: listingTypeFor(row.category),
+    listingType: listingTypeFor(row.category, row.title),
     description: `${row.title} is ${status.toLowerCase()}.`,
     imageUri: row.imageUri,
     expandedIntro: `${row.title} · ${row.channel}`,
     equipmentDetails: [`Category: ${row.category}`, `Channel: ${row.channel}`],
     conditions: [],
-    pricing: [`Status: ${status}`]
+    pricing: [moneyLabel(row.dailyRate, row.rateUnit), `Status: ${status}`]
   };
 }
 
@@ -505,66 +521,126 @@ function RentalPlaceholderTab({ title, subtitle }: { title: string; subtitle: st
   );
 }
 
+function PaymentsTab({ bookings }: { bookings: Booking[] }) {
+  if (!bookings.length) {
+    return <RentalPlaceholderTab title="Payments" subtitle="Payments for your bookings will appear here." />;
+  }
+  return (
+    <ScrollView style={styles.tabScroll} contentContainerStyle={styles.tabContent}>
+      {bookings.map((row) => (
+        <View key={row.id} style={styles.card}>
+          <Text style={styles.cardTitle}>{row.title}</Text>
+          <Text style={styles.cardMetaAccent}>{moneyLabel(row.amount, row.rateUnit)}</Text>
+          <Text style={styles.cardDesc}>
+            {row.customerName || "Customer"} · {row.bookingDate || "Date not set"}
+          </Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
 export function ProviderRentalScreen() {
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState<RentalTab>("inventory");
   const [inventory, setInventory] = useState<Listing[]>([]);
   const [liveBookings, setLiveBookings] = useState<Booking[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const storedListings = await uploadLocalListings(token).catch(() => getProviderListings());
+      const rentalListings = storedListings.filter((row) => String(row.channel || "Rental").toLowerCase() === "rental");
+      const ownIds = new Set(rentalListings.map((row) => String(row.id)));
+      const ownTitles = new Set(rentalListings.map((row) => row.title.trim().toLowerCase()).filter(Boolean));
+      const rateById = new Map(rentalListings.map((row) => [String(row.id), row]));
+      const rateByTitle = new Map(rentalListings.map((row) => [row.title.trim().toLowerCase(), row]));
+      const remote = token ? await fetchProviderBookings(token).catch(() => ({ bookings: [] })) : { bookings: [] };
+      const localBookings = (await getProviderBookings()).filter(
+        (booking) => ownIds.has(String(booking.listingId)) || ownTitles.has(booking.listingTitle.trim().toLowerCase())
+      );
+      const seen = new Set<string>();
+      const merged: Booking[] = [];
+      for (const booking of remote.bookings || []) {
+        const key = String(booking.id);
+        if (seen.has(key)) continue;
+        seen.add(`title:${booking.title}|${booking.date}`);
+        seen.add(key);
+        const amount = Number(String(booking.amount ?? "").replace(/[^0-9.]/g, ""));
+        const status = bookingStatusLabel(booking.status);
+        merged.push({
+          id: key,
+          title: booking.title,
+          category: booking.category || "Booking",
+          location: booking.location,
+          bookingType: listingTypeFor(booking.category || "", booking.title),
+          status,
+          badge: status,
+          customerName: booking.customerName || "Customer",
+          customerPhone: booking.customerPhone || "",
+          bookingDate: booking.date || "",
+          startTime: "",
+          endTime: "",
+          duration: "",
+          pickupLocation: booking.location || "",
+          requestedOn: booking.createdAt || "",
+          notes: booking.note || "",
+          amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
+          rateUnit: booking.rateUnit || undefined
+        });
+      }
+      for (const booking of localBookings) {
+        const key = `${booking.listingTitle}|${booking.bookingDate}`;
+        if (seen.has(key) || seen.has(booking.id)) continue;
+        seen.add(key);
+        const match = rateById.get(String(booking.listingId)) || rateByTitle.get(booking.listingTitle.trim().toLowerCase());
+        merged.push({
+          id: booking.id,
+          title: booking.listingTitle,
+          category: match?.category || "Booking",
+          location: booking.pickupLocation,
+          bookingType: listingTypeFor(match?.category || "", booking.listingTitle),
+          status: "Pending",
+          badge: "Pending",
+          customerName: booking.customerName,
+          customerPhone: booking.customerPhone,
+          bookingDate: booking.bookingDate,
+          startTime: booking.startTime,
+          endTime: booking.endTime,
+          duration: booking.duration,
+          pickupLocation: booking.pickupLocation,
+          requestedOn: booking.createdAt,
+          notes: booking.notes || "",
+          imageUri: match?.imageUri,
+          amount: match?.dailyRate,
+          rateUnit: match?.rateUnit
+        });
+      }
+      setInventory(rentalListings.map(toInventoryListing));
+      setLiveBookings(merged);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
-      let mounted = true;
-      const load = async () => {
-        await uploadCustomerBookings(token).catch(() => undefined);
-        const storedListings = await uploadLocalListings(token).catch(() => getProviderListings());
-        const rentalListings = storedListings.filter((row) => row.channel !== "Services" && row.channel !== "Educators");
-        const storedBookings = await getProviderBookings();
-        if (!mounted) return;
-        setInventory(rentalListings.map(toInventoryListing));
-        setLiveBookings(
-          storedBookings.map((booking) => {
-            const match = rentalListings.find((row) =>
-              booking.listingTitle.toLowerCase().includes(row.title.toLowerCase())
-            );
-            return {
-              id: booking.id,
-              title: booking.listingTitle,
-              category: match?.category || "Booking",
-              location: booking.pickupLocation,
-              bookingType: listingTypeFor(match?.category || booking.listingTitle),
-              status: "Pending",
-              badge: "Pending",
-              customerName: booking.customerName,
-              customerPhone: booking.customerPhone,
-              bookingDate: booking.bookingDate,
-              startTime: booking.startTime,
-              endTime: booking.endTime,
-              duration: booking.duration,
-              pickupLocation: booking.pickupLocation,
-              requestedOn: booking.createdAt,
-              notes: booking.notes || "",
-              imageUri: match?.imageUri
-            };
-          })
-        );
-      };
       void load();
-      return () => {
-        mounted = false;
-      };
-    }, [token])
+    }, [load])
   );
 
   return (
     <View style={styles.screen}>
       <ProviderChromeHeader />
+      <Pressable style={styles.refreshBtn} onPress={() => void load()} disabled={refreshing}>
+        <Text style={styles.refreshText}>{refreshing ? "Refreshing…" : "Refresh status"}</Text>
+      </Pressable>
       <RentalTabBar active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "inventory" ? <InventoryTab listings={inventory} /> : null}
       {activeTab === "bookings" ? <BookingsTab bookings={liveBookings} /> : null}
-      {activeTab === "payments" ? (
-        <RentalPlaceholderTab title="Payments" subtitle="Earnings and payout history will appear here." />
-      ) : null}
+      {activeTab === "payments" ? <PaymentsTab bookings={liveBookings} /> : null}
       {activeTab === "reports" ? (
         <RentalPlaceholderTab title="Reports" subtitle="Performance and rental reports will appear here." />
       ) : null}
@@ -574,6 +650,18 @@ export function ProviderRentalScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
+  refreshBtn: {
+    alignSelf: "flex-end",
+    marginRight: 16,
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10
+  },
+  refreshText: {
+    color: APP_LIME,
+    fontSize: 13,
+    fontWeight: "700"
+  },
   tabBar: {
     flexDirection: "row",
     alignItems: "flex-end",
@@ -619,7 +707,7 @@ const styles = StyleSheet.create({
   tabContent: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: 120,
+    paddingBottom: 32,
     gap: 14
   },
   filterRow: {

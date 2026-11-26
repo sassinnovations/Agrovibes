@@ -14,6 +14,10 @@ export type AdminListingRow = {
   date: string | null;
   flags: number;
   rate?: string | number | null;
+  rateUnit?: string | null;
+  locationLabel?: string | null;
+  radiusKm?: number | string | null;
+  hasArea?: boolean;
   channel?: string;
   categoryName?: string;
   rcNumber?: string;

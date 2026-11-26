@@ -1,5 +1,6 @@
 export function listingStatusText(status: string) {
-  if (status === "approved") return "Available";
-  if (status === "rejected" || status === "unpublished") return "Inactive";
+  const value = String(status || "").toLowerCase();
+  if (value === "approved") return "Available";
+  if (value === "rejected" || value === "unpublished") return "Rejected";
   return "Waiting for approval";
 }

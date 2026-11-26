@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import {
   fetchProviderBookings,
@@ -9,6 +9,7 @@ import {
 } from "../../api/providerKyc";
 import { listingImage } from "./listingImages";
 import { listingStatusText } from "./providerStatus";
+import { usePullToRefresh } from "./usePullToRefresh";
 
 type Tab = "inventory" | "bookings" | "payments" | "reports";
 
@@ -19,34 +20,36 @@ export function ProviderRentalPage() {
   const [bookings, setBookings] = useState<ProviderBooking[]>([]);
   const [status, setStatus] = useState("not_submitted");
   const [error, setError] = useState("");
+  const pageRef = useRef<HTMLElement>(null);
+
+  const load = async () => {
+    if (!token) return;
+    try {
+      const [kyc, listed, booked] = await Promise.all([
+        fetchProviderKycStatus(token),
+        fetchProviderListings(token),
+        fetchProviderBookings(token)
+      ]);
+      setStatus(kyc.status);
+      setListings((listed.listings || []).filter((row) => String(row.channel || "Rental").toLowerCase() === "rental"));
+      setBookings(booked.bookings || []);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load rentals.");
+    }
+  };
+
+  const pull = usePullToRefresh(pageRef, load);
 
   useEffect(() => {
-    if (!token) return;
-    let active = true;
-    const load = async () => {
-      try {
-        const [kyc, listed, booked] = await Promise.all([
-          fetchProviderKycStatus(token),
-          fetchProviderListings(token),
-          fetchProviderBookings(token)
-        ]);
-        if (!active) return;
-        setStatus(kyc.status);
-        setListings((listed.listings || []).filter((row) => row.channel !== "Services" && row.channel !== "Educators"));
-        setBookings(booked.bookings || []);
-        setError("");
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Could not load rentals.");
-      }
-    };
     void load();
-    return () => {
-      active = false;
-    };
+    // Reload whenever the signed-in provider changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   return (
-    <section className="provider-panel">
+    <section className="provider-panel" ref={pageRef}>
+      <div className={`provider-pull${pull.open ? " is-open" : ""}`}>{pull.open ? pull.label : ""}</div>
       <div className="provider-subtabs" role="tablist">
         {(
           [
@@ -72,7 +75,8 @@ export function ProviderRentalPage() {
         ) : (
           <div className="provider-list">
             {listings.map((row) => {
-              const photo = listingImage(row.id);
+              const photo = row.imageUrl || listingImage(row.id);
+              const amount = Number(String(row.dailyRate ?? "").replace(/[^0-9.]/g, ""));
               return (
                 <article key={row.id} className="provider-card">
                   {photo ? <img className="provider-card__photo" src={photo} alt="" /> : <div className="provider-card__photo provider-card__photo--empty" />}
@@ -81,6 +85,7 @@ export function ProviderRentalPage() {
                     {row.category} · {row.channel}
                   </span>
                   <em>{listingStatusText(row.status)}</em>
+                  <span>{amount > 0 ? `₹${Math.round(amount).toLocaleString("en-IN")}${row.rateUnit ? ` / ${row.rateUnit}` : ""}` : "Rate not set"}</span>
                 </article>
               );
             })}
@@ -104,14 +109,33 @@ export function ProviderRentalPage() {
                   {row.date || "Date not set"} · {row.location || "Location not set"}
                 </span>
                 {row.note ? <span>{row.note}</span> : null}
-                <em>Pending</em>
+                <em>{row.status ? row.status.charAt(0).toUpperCase() + row.status.slice(1) : "Pending"}</em>
               </article>
             ))}
           </div>
         )
       ) : null}
 
-      {tab === "payments" ? <p>Earnings and payout history will appear here.</p> : null}
+      {tab === "payments" ? (
+        bookings.length === 0 ? (
+          <p>Payments for your bookings will appear here.</p>
+        ) : (
+          <div className="provider-list">
+            {bookings.map((row) => {
+              const amount = Number(String(row.amount ?? "").replace(/[^0-9.]/g, ""));
+              return (
+                <article key={row.id} className="provider-card">
+                  <strong>{row.title}</strong>
+                  <span>
+                    {row.customerName || "Customer"} · {row.date || "Date not set"}
+                  </span>
+                  <em>{amount > 0 ? `₹${Math.round(amount).toLocaleString("en-IN")}${row.rateUnit ? ` / ${row.rateUnit}` : ""}` : "Rate not set"}</em>
+                </article>
+              );
+            })}
+          </div>
+        )
+      ) : null}
       {tab === "reports" ? <p>Performance and rental reports will appear here.</p> : null}
     </section>
   );

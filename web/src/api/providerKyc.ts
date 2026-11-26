@@ -100,6 +100,9 @@ export type ProviderListing = {
   channel: string;
   status: string;
   rcNumber?: string | null;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
   createdAt: string;
 };
 
@@ -111,7 +114,19 @@ export async function fetchProviderListings(token: string) {
 
 export async function submitProviderListing(
   token: string,
-  payload: { title: string; category: string; channel: string; rcNumber?: string }
+  payload: {
+    title: string;
+    category: string;
+    channel: string;
+    rcNumber?: string;
+    imageUrl?: string;
+    dailyRate?: string | number;
+    rateUnit?: string;
+    locationLabel?: string;
+    locationLat?: number;
+    locationLng?: number;
+    radiusKm?: number;
+  }
 ) {
   return (await fetchWithAuth(`${API_BASE_URL}/v1/provider/listings`, token, {
     method: "POST",
@@ -122,6 +137,7 @@ export async function submitProviderListing(
 
 export type ProviderBooking = {
   id: number;
+  listingId?: string | null;
   title: string;
   category: string;
   location: string;
@@ -131,6 +147,8 @@ export type ProviderBooking = {
   createdAt: string;
   customerName: string;
   customerPhone: string;
+  amount?: number | string | null;
+  rateUnit?: string | null;
 };
 
 export async function fetchProviderBookings(token: string) {

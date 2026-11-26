@@ -8,10 +8,22 @@ export type PublicRentalListing = {
   status: string;
   createdAt: string;
   providerName: string;
+  imageUrl?: string | null;
+  dailyRate?: number | string | null;
+  rateUnit?: string | null;
+  locationLabel?: string | null;
+  radiusKm?: number | string | null;
+  distanceKm?: number | string | null;
 };
 
-export async function fetchPublicRentals(token: string | null) {
-  return (await fetchWithAuth(`${API_BASE_URL}/v1/rentals/listings`, token)) as {
+export async function fetchPublicRentals(token: string | null, near?: { lat?: number | null; lng?: number | null }) {
+  const params = new URLSearchParams();
+  if (Number.isFinite(Number(near?.lat)) && Number.isFinite(Number(near?.lng))) {
+    params.set("lat", String(near?.lat));
+    params.set("lng", String(near?.lng));
+  }
+  const query = params.toString();
+  return (await fetchWithAuth(`${API_BASE_URL}/v1/rentals/listings${query ? `?${query}` : ""}`, token)) as {
     listings: PublicRentalListing[];
   };
 }

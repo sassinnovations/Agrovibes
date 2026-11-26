@@ -8,6 +8,7 @@ import { useAuth } from "../../../auth/AuthContext";
 import { APP_LIME, APP_TEXT, APP_TEXT_MUTED } from "../../../theme/appColors";
 import {
   getProviderListings,
+  getProviderRegistrationDraft,
   listingStatusText,
   uploadLocalListings,
   syncProviderRegistrationFromApi,
@@ -22,31 +23,59 @@ export function ProviderListingScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const { token } = useAuth();
   const [registrationStatus, setRegistrationStatus] = useState<ProviderApprovalStatus>("not_submitted");
+  const [bankReady, setBankReady] = useState(false);
   const [listings, setListings] = useState<ProviderListingRecord[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [synced, draft] = await Promise.all([
+        syncProviderRegistrationFromApi(token),
+        getProviderRegistrationDraft()
+      ]);
+      const hasBank = Boolean(draft?.bankVerified);
+      setRegistrationStatus(synced);
+      setBankReady(hasBank);
+      if (synced === "approved" && !hasBank) {
+        setListings([]);
+        return;
+      }
+      const nextListings = await uploadLocalListings(token).catch(() => getProviderListings());
+      setListings(nextListings);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [navigation, token]);
 
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      const load = async () => {
-        const synced = await syncProviderRegistrationFromApi(token);
-        const nextListings = await uploadLocalListings(token).catch(() => getProviderListings());
-        if (!active) return;
-        setRegistrationStatus(synced);
-        setListings(nextListings);
-      };
       void load();
-      return () => {
-        active = false;
-      };
-    }, [token])
+    }, [load])
   );
 
   return (
     <View style={styles.screen}>
       <ProviderChromeHeader />
+      <Pressable style={styles.refreshBtn} onPress={() => void load()} disabled={refreshing}>
+        <Text style={styles.refreshText}>{refreshing ? "Refreshing…" : "Refresh status"}</Text>
+      </Pressable>
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <Text style={styles.title}>Your listings</Text>
         <Text style={styles.sub}>Create a rental, service, store, or educator listing.</Text>
+        {registrationStatus === "approved" && !bankReady ? (
+          <View style={styles.pendingCard}>
+            <Text style={styles.pendingTitle}>Add bank details first</Text>
+            <Text style={styles.pendingSub}>Listings stay closed until the bank account is saved.</Text>
+            <Pressable
+              style={styles.bankBtn}
+              onPress={() => navigation.navigate("ProviderBankDetails", { purpose: "payouts" })}
+              accessibilityRole="button"
+            >
+              <Text style={styles.bankBtnText}>Add Bank Account</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {registrationStatus !== "approved" ? (
           <View style={styles.pendingCard}>
             <Text style={styles.pendingTitle}>
@@ -63,23 +92,33 @@ export function ProviderListingScreen() {
             </Text>
           </View>
         ) : null}
-        {listings.map((listing) => (
-          <View key={listing.id} style={styles.listingCard}>
-            <Text style={styles.listingTitle}>{listing.title}</Text>
-            <Text style={styles.listingMeta}>
-              {listing.category} · {listing.channel}
-            </Text>
-            <Text style={styles.listingStatus}>{listingStatusText(listing)}</Text>
-          </View>
-        ))}
+        {bankReady
+          ? listings.map((listing) => (
+              <View key={listing.id} style={styles.listingCard}>
+                <Text style={styles.listingTitle}>{listing.title}</Text>
+                <Text style={styles.listingMeta}>
+                  {listing.category} · {listing.channel}
+                </Text>
+                <Text style={styles.listingStatus}>{listingStatusText(listing)}</Text>
+              </View>
+            ))
+          : null}
+        {registrationStatus !== "approved" || bankReady ? (
         <Pressable
           style={styles.cta}
-          onPress={() => navigation.navigate("ProviderNewListing")}
+          onPress={() => {
+            if (registrationStatus === "approved" && bankReady) {
+              navigation.navigate("ProviderNewListing");
+              return;
+            }
+            navigation.navigate("Overview");
+          }}
           accessibilityRole="button"
         >
           <Ionicons name="add" size={22} color="#000" />
           <Text style={styles.ctaText}>New Listing</Text>
         </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -87,11 +126,13 @@ export function ProviderListingScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
+  refreshBtn: { alignSelf: "flex-end", marginRight: 16, marginTop: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  refreshText: { color: APP_LIME, fontSize: 13, fontWeight: "700" },
   body: {
     alignItems: "center",
     paddingHorizontal: 28,
     paddingTop: 28,
-    paddingBottom: 120
+    paddingBottom: 32
   },
   title: { color: APP_LIME, fontSize: 22, fontWeight: "800" },
   sub: {
@@ -114,6 +155,15 @@ const styles = StyleSheet.create({
   },
   pendingTitle: { color: APP_LIME, fontSize: 13, fontWeight: "700", marginBottom: 4 },
   pendingSub: { color: APP_TEXT_MUTED, fontSize: 12, lineHeight: 17 },
+  bankBtn: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    backgroundColor: APP_LIME,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8
+  },
+  bankBtnText: { color: "#1a1a1a", fontSize: 13, fontWeight: "800" },
   listingCard: {
     width: "100%",
     maxWidth: 398,

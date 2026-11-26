@@ -27,6 +27,9 @@ import { TermsOfUse } from "../pages/TermsOfUse";
 import { AdminReportsPage } from "../pages/AdminReportsPage";
 import { JoinProviderPage } from "../pages/provider/JoinProviderPage";
 import { ProviderDashboard } from "../pages/provider/ProviderDashboard";
+import { ProviderBankPage } from "../pages/provider/ProviderBankPage";
+import { ProviderRazorpayPage } from "../pages/provider/ProviderRazorpayPage";
+import { RequireProviderBank } from "../pages/provider/RequireProviderBank";
 import { ProviderOverviewPage } from "../pages/provider/ProviderOverviewPage";
 import { ProviderRentalPage } from "../pages/provider/ProviderRentalPage";
 import { ProviderListingsPage } from "../pages/provider/ProviderListingsPage";
@@ -34,6 +37,7 @@ import { ProviderNewListingPage } from "../pages/provider/ProviderNewListingPage
 import { ProviderServicesPage } from "../pages/provider/ProviderServicesPage";
 import { ProviderProfilePage } from "../pages/provider/ProviderProfilePage";
 import { RentalsPortalPage } from "../pages/rentals/RentalsPortalPage";
+import { RentalCartPage } from "../pages/rentals/RentalCartPage";
 import { RentalCategoryPage } from "../pages/rentals/RentalCategoryPage";
 
 function ProtectedLayout() {
@@ -69,6 +73,7 @@ export function AppRoutes() {
         <Route index element={<HomePage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="rentals" element={<RentalsPortalPage />} />
+        <Route path="rentals/cart" element={<RentalCartPage />} />
         <Route path="rentals/:categoryId" element={<RentalCategoryPage />} />
         <Route path="drops" element={<ReelsPage />} />
         <Route path="reels" element={<Navigate to="/drops" replace />} />
@@ -102,9 +107,13 @@ export function AppRoutes() {
         <Route path="provider/join" element={<JoinProviderPage />} />
         <Route path="provider" element={<ProviderDashboard />}>
           <Route index element={<ProviderOverviewPage />} />
+          <Route path="bank" element={<ProviderBankPage />} />
+          <Route path="razorpay" element={<ProviderRazorpayPage />} />
           <Route path="rental" element={<ProviderRentalPage />} />
-          <Route path="listings" element={<ProviderListingsPage />} />
-          <Route path="listings/new" element={<ProviderNewListingPage />} />
+          <Route element={<RequireProviderBank />}>
+            <Route path="listings" element={<ProviderListingsPage />} />
+            <Route path="listings/new" element={<ProviderNewListingPage />} />
+          </Route>
           <Route path="services" element={<ProviderServicesPage />} />
           <Route path="profile" element={<ProviderProfilePage />} />
         </Route>

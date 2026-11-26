@@ -45,6 +45,13 @@ export const RENTAL_CATEGORIES: RentalCategory[] = [
     image: "/rentals/tractor-rental.png"
   },
   {
+    id: "land",
+    title: "Land",
+    blurb: "Farmland and plots available to rent.",
+    wash: "#1c2b22",
+    image: "/rentals/crop.png"
+  },
+  {
     id: "labour",
     title: "Farm Labour",
     blurb: "Field crews for sowing, weeding, and harvest.",
@@ -83,7 +90,7 @@ export const RENTAL_VISUALS: RentalVisual[] = [
   { id: "nursery", categoryId: "transplanting", title: "Seedling transplant", image: "/rentals/greenhouse.png" }
 ];
 
-const FEATURED = ["machinery", "drone", "labour", "soil", "drivers", "transplanting"];
+const FEATURED = ["machinery", "land", "drone", "labour", "soil", "drivers", "transplanting"];
 
 export function rentalCategoryById(id: string) {
   return RENTAL_CATEGORIES.find((item) => item.id === id);
@@ -95,6 +102,7 @@ export function featuredRentalCategories() {
 
 export function portalCategoryForListing(category: string, title: string) {
   const text = `${category} ${title}`.toLowerCase();
+  if (text.includes("land") || text.includes("farmland") || text.includes("acre")) return "land";
   if (text.includes("drone")) return "drone";
   if (text.includes("driver") || text.includes("operator")) return "drivers";
   if (/(labour|labor|manual)/.test(text)) return "labour";

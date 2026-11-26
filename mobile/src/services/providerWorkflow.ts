@@ -1,5 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { fetchProviderKycStatus, fetchProviderListings, submitProviderKyc, submitProviderListing } from "./api";
+import {
+  fetchProviderKycStatus,
+  fetchProviderListings,
+  submitProviderKyc,
+  submitProviderListing,
+  updateProviderListing,
+  uploadImageFile
+} from "./api";
 
 export type ProviderApprovalStatus = "not_submitted" | "pending" | "approved" | "rejected";
 export type ListingApprovalStatus = "pending" | "approved" | "rejected";
@@ -58,8 +65,10 @@ export type ProviderListingRecord = {
   status: ListingApprovalStatus;
   createdAt: string;
   approvedAt?: string;
-  /** Local photo. The listings API does not store images. */
+  /** Uploaded photo URL, or a local file URI until upload finishes. */
   imageUri?: string;
+  dailyRate?: number;
+  rateUnit?: string;
   rcNumber?: string;
   /** Set when this phone copy has not been inserted into provider_listings. */
   serverError?: string;
@@ -124,6 +133,13 @@ function uploadFailureMessage(error: unknown): string {
 
 export function listingReachedServer(listing: Pick<ProviderListingRecord, "id">): boolean {
   return isServerListingId(listing.id);
+}
+
+export function normalizeListingStatus(status: string): ListingApprovalStatus {
+  const value = String(status || "").toLowerCase();
+  if (value === "approved") return "approved";
+  if (value === "rejected" || value === "unpublished") return "rejected";
+  return "pending";
 }
 
 export function listingStatusText(listing: ProviderListingRecord): string {
@@ -214,11 +230,15 @@ export async function syncProviderRegistrationFromApi(token?: string | null): Pr
   if (!token) return state.registrationStatus;
   try {
     const remote = await fetchProviderKycStatus(token);
-    const remoteStatus = String(remote.status || "not_submitted").toLowerCase();
-    const nextStatus: ProviderApprovalStatus =
+    const remoteStatus = String(remote.status || "not_submitted").trim().toLowerCase();
+    let nextStatus: ProviderApprovalStatus =
       remoteStatus === "pending" || remoteStatus === "approved" || remoteStatus === "rejected"
         ? remoteStatus
         : "not_submitted";
+    if (nextStatus === "not_submitted") {
+      const listed = await fetchProviderListings(token).catch(() => null);
+      if ((listed?.listings || []).length > 0) nextStatus = "approved";
+    }
     if (nextStatus !== state.registrationStatus) {
       let next = { ...state, registrationStatus: nextStatus };
       if (nextStatus === "approved") {
@@ -240,7 +260,10 @@ export async function syncProviderRegistrationFromApi(token?: string | null): Pr
       return nextStatus;
     }
   } catch {
-    // Keep local status if API is unreachable.
+    if (token) {
+      const listed = await fetchProviderListings(token).catch(() => null);
+      if ((listed?.listings || []).length > 0) return "approved";
+    }
   }
   return state.registrationStatus;
 }
@@ -351,22 +374,46 @@ export async function submitProviderRegistrationForApproval(token?: string | nul
   await writeState(next);
 }
 
+function listingAmount(value: unknown) {
+  const amount = Number(String(value ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+}
+
 export async function submitListingForApproval(input: {
   title: string;
   category: string;
   channel: string;
   imageUri?: string;
+  dailyRate?: string | number;
+  rateUnit?: string;
   rcNumber?: string;
+  locationLabel?: string;
+  locationLat?: number;
+  locationLng?: number;
+  radiusKm?: number;
   token?: string | null;
 }): Promise<string> {
   if (!input.token) {
     throw new Error("Please sign in again, then submit the listing.");
   }
+  let imageUrl = /^https?:\/\//i.test(String(input.imageUri || "")) ? String(input.imageUri) : "";
+  if (input.imageUri && !imageUrl) {
+    const uploaded = await uploadImageFile(input.imageUri);
+    imageUrl = uploaded.url;
+  }
+  const dailyRate = listingAmount(input.dailyRate);
   const created = await submitProviderListing(input.token, {
     title: input.title,
     category: input.category,
     channel: input.channel,
-    rcNumber: input.rcNumber
+    rcNumber: input.rcNumber,
+    imageUrl: imageUrl || undefined,
+    dailyRate,
+    rateUnit: input.rateUnit,
+    locationLabel: input.locationLabel,
+    locationLat: input.locationLat,
+    locationLng: input.locationLng,
+    radiusKm: input.radiusKm
   });
   const serverId = Number(created?.listing?.id);
   if (!Number.isFinite(serverId) || serverId <= 0) {
@@ -380,7 +427,9 @@ export async function submitListingForApproval(input: {
     category: input.category,
     channel: input.channel,
     status: "pending",
-    imageUri: input.imageUri,
+    imageUri: imageUrl || input.imageUri,
+    dailyRate,
+    rateUnit: input.rateUnit,
     rcNumber: input.rcNumber,
     createdAt: created.listing?.createdAt || new Date().toISOString()
   };
@@ -416,7 +465,10 @@ export async function uploadLocalListings(token?: string | null): Promise<Provid
       const created = await submitProviderListing(token, {
         title: row.title,
         category: row.category,
-        channel: row.channel
+        channel: row.channel,
+        imageUrl: /^https?:\/\//i.test(String(row.imageUri || "")) ? row.imageUri : undefined,
+        dailyRate: row.dailyRate,
+        rateUnit: row.rateUnit
       });
       const serverId = Number(created?.listing?.id);
       if (!Number.isFinite(serverId) || serverId <= 0) {
@@ -463,11 +515,28 @@ export async function syncProviderListingsFromApi(token?: string | null): Promis
       title: row.title,
       category: row.category,
       channel: row.channel,
-      status: row.status === "approved" ? "approved" : row.status === "rejected" ? "rejected" : "pending",
-      imageUri: imageById.get(String(row.id)) || imageByTitle.get(row.title),
+      status: normalizeListingStatus(row.status),
+      imageUri: /^https?:\/\//i.test(String(row.imageUrl || ""))
+        ? String(row.imageUrl)
+        : imageById.get(String(row.id)) || imageByTitle.get(row.title),
+      dailyRate: listingAmount(row.dailyRate),
+      rateUnit: row.rateUnit || undefined,
       rcNumber: row.rcNumber || rcById.get(String(row.id)) || rcByTitle.get(row.title),
       createdAt: row.createdAt
     }));
+    if (token) {
+      for (const row of remoteRows) {
+        const localImage = row.imageUri || imageById.get(row.id) || imageByTitle.get(row.title);
+        if (!localImage || /^https?:\/\//i.test(localImage)) continue;
+        try {
+          const uploaded = await uploadImageFile(localImage);
+          await updateProviderListing(token, row.id, { imageUrl: uploaded.url, dailyRate: row.dailyRate, rateUnit: row.rateUnit });
+          row.imageUri = uploaded.url;
+        } catch {
+          row.imageUri = localImage;
+        }
+      }
+    }
     const localOnly = state.listings.filter((row) => !isServerListingId(row.id));
     const listings = [...remoteRows, ...localOnly];
     await writeState({ ...state, listings });
@@ -486,8 +555,11 @@ export async function getProviderBookings(): Promise<ProviderBookingRecord[]> {
   const { getCustomerRentalBookings } = await import("../screens/rental/customerRentalBookings");
   const customerBookings = await getCustomerRentalBookings();
   const state = await readState();
+  const ownIds = new Set(state.listings.map((row) => String(row.id)));
+  const ownTitles = new Set(state.listings.map((row) => row.title.trim().toLowerCase()).filter(Boolean));
   const known = new Set(state.bookings.map((booking) => `${booking.listingTitle}|${booking.bookingDate}`));
   const imported: ProviderBookingRecord[] = customerBookings
+    .filter((booking) => ownIds.has(String(booking.listingId)) || ownTitles.has(booking.title.trim().toLowerCase()))
     .filter((booking) => !known.has(`${booking.title}|${booking.date}`))
     .map((booking) => ({
       id: booking.id,
@@ -503,8 +575,11 @@ export async function getProviderBookings(): Promise<ProviderBookingRecord[]> {
       notes: booking.note,
       createdAt: booking.createdAt
     }));
-  if (!imported.length) return state.bookings;
-  const bookings = [...imported, ...state.bookings];
+  const ownBookings = state.bookings.filter(
+    (booking) => ownIds.has(String(booking.listingId)) || ownTitles.has(booking.listingTitle.trim().toLowerCase())
+  );
+  if (!imported.length) return ownBookings;
+  const bookings = [...imported, ...ownBookings];
   await writeState({ ...state, bookings });
   return bookings;
 }

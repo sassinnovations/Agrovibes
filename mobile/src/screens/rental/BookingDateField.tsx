@@ -16,11 +16,13 @@ function formatBookingDate(date: Date) {
 export function BookingDateField({
   value,
   onChange,
-  label = "Date you need it"
+  label = "Date you need it",
+  plain = false
 }: {
   value: string;
   onChange: (value: string) => void;
   label?: string;
+  plain?: boolean;
 }) {
   const today = startOfDay(new Date());
   const [open, setOpen] = useState(false);
@@ -42,10 +44,17 @@ export function BookingDateField({
 
   return (
     <>
-      <Text style={styles.label}>{label}</Text>
-      <Pressable style={styles.field} onPress={() => setOpen(true)} accessibilityRole="button">
-        <Ionicons name="calendar-outline" size={18} color={APP_LIME} />
-        <Text style={[styles.fieldText, value ? null : styles.placeholder]}>{value || "Choose a date"}</Text>
+      {plain ? null : <Text style={styles.label}>{label}</Text>}
+      <Pressable style={plain ? styles.plainField : styles.field} onPress={() => setOpen(true)} accessibilityRole="button">
+        {plain ? <Ionicons name="calendar-outline" size={18} color="#6b7280" /> : <Ionicons name="calendar-outline" size={18} color={APP_LIME} />}
+        {plain ? (
+          <View>
+            <Text style={styles.plainLabel}>{label}</Text>
+            <Text style={[styles.plainValue, value ? null : styles.plainPlaceholder]}>{value || "Select"}</Text>
+          </View>
+        ) : (
+          <Text style={[styles.fieldText, value ? null : styles.placeholder]}>{value || "Choose a date"}</Text>
+        )}
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
@@ -115,6 +124,10 @@ const styles = StyleSheet.create({
   },
   fieldText: { color: APP_TEXT, fontSize: 15, fontWeight: "700" },
   placeholder: { color: APP_TEXT_MUTED, fontWeight: "600" },
+  plainField: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  plainLabel: { color: "#6b7280", fontSize: 12, fontWeight: "600" },
+  plainValue: { color: "#1a1a1a", fontSize: 14, fontWeight: "700", marginTop: 2 },
+  plainPlaceholder: { color: "#9ca3af", fontWeight: "600" },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" },
   sheet: {
     backgroundColor: "#1c1c1c",

@@ -68,9 +68,19 @@ export function navigateToUserSearch() {
   }
 }
 
-export function navigateToRentalCategory(categoryId: string, location: string) {
+export function navigateToRentalCategory(
+  categoryId: string,
+  location: string,
+  near?: { lat?: number | null; lng?: number | null }
+) {
   if (!navigationRef.isReady()) return;
-  navigationRef.navigate("RentalCategory", { categoryId, location });
+  const lat = Number(near?.lat);
+  const lng = Number(near?.lng);
+  navigationRef.navigate("RentalCategory", {
+    categoryId,
+    location,
+    ...(Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : {})
+  });
 }
 
 export function navigateToRentalCart(location?: string) {

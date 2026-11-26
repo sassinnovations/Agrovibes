@@ -21,7 +21,7 @@ export function ProviderAppNavigator() {
   return (
     <View style={styles.root}>
       <Tab.Navigator
-        initialRouteName="Listing"
+        initialRouteName="Overview"
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
@@ -31,19 +31,7 @@ export function ProviderAppNavigator() {
             backgroundColor: "#303132"
           },
           tabBarStyle: {
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: undefined,
-            backgroundColor: "transparent",
-            borderTopWidth: 0,
-            borderTopColor: "transparent",
-            borderWidth: 0,
-            elevation: 0,
-            shadowOpacity: 0,
-            shadowRadius: 0,
-            shadowOffset: { width: 0, height: 0 }
+            display: "none"
           }
         }}
         safeAreaInsets={{ top: 0 }}
