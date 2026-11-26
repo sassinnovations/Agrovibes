@@ -948,10 +948,17 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
   const includeIfscDetails = ifscDetails !== false;
   if (account.length < 6) throw providerError("Enter a valid account number.", 400);
   if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) throw providerError("Enter a valid IFSC.", 400);
-  const identity = await requireAadhaarIdentity(userId);
-  if (!identity?.aadhaarName) {
-    throw providerError("Verify Aadhaar with DigiLocker before the bank account.", 400);
-  }
+  await ensureProviderKycIdentity();
+  const identityRows = await query(
+    `
+    SELECT aadhaar_name AS "aadhaarName"
+    FROM provider_kyc_identity
+    WHERE user_id = $1 AND NULLIF(TRIM(aadhaar_name), '') IS NOT NULL
+    LIMIT 1
+    `,
+    [userId]
+  );
+  const identity = identityRows.rows[0] || null;
   const provider = surepassToken() ? "surepass" : activeKycProvider();
   if (!provider || (provider === "sandbox" && !sandboxConfigured())) {
     throw providerError("Bank verification is not configured. Add SUREPASS_TOKEN for the production Surepass bank API.", 503);
@@ -1017,23 +1024,26 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
     }
   }
 
-  const matched = namesMatch(identity.aadhaarName, holderName);
+  const matched = identity?.aadhaarName ? namesMatch(identity.aadhaarName, holderName) : Boolean(holderName);
   await query(
     `
-    UPDATE provider_kyc_identity
-    SET bank_last4 = $2,
-        bank_ifsc = $3,
-        bank_holder_name = $4,
-        bank_matched = $5,
-        bank_verified_at = NOW(),
-        updated_at = NOW()
-    WHERE user_id = $1
+    INSERT INTO provider_kyc_identity (
+      user_id, bank_last4, bank_ifsc, bank_holder_name, bank_matched, bank_verified_at, updated_at
+    )
+    VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+    ON CONFLICT (user_id) DO UPDATE SET
+      bank_last4 = EXCLUDED.bank_last4,
+      bank_ifsc = EXCLUDED.bank_ifsc,
+      bank_holder_name = EXCLUDED.bank_holder_name,
+      bank_matched = EXCLUDED.bank_matched,
+      bank_verified_at = NOW(),
+      updated_at = NOW()
     `,
     [userId, account.slice(-4), code, holderName, matched]
   );
   return {
     holderName,
-    aadhaarName: identity.aadhaarName,
+    aadhaarName: identity?.aadhaarName || "",
     matched,
     ifsc: code,
     bankName,
