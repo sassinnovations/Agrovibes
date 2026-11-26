@@ -106,6 +106,15 @@ a.provider-flow__card {
   font-weight: 500;
 }
 
+.provider-bank input:-webkit-autofill,
+.provider-bank input:-webkit-autofill:hover,
+.provider-bank input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc;
+  caret-color: #f8fafc;
+  box-shadow: 0 0 0 1000px #262626 inset;
+  transition: background-color 9999s ease-out;
+}
+
 .provider-bank button {
   border: 0;
   border-radius: 999px;
