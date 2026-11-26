@@ -11198,12 +11198,22 @@ router.post("/v1/provider/payouts/razorpay", authRequired, async (req, res) => {
     }
     const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
     const headers = { Authorization: `Basic ${auth}`, "Content-Type": "application/json" };
+    const razorpayMessage = (payload, fallback) => {
+      const description = String(payload?.error?.description || "").trim();
+      if (/access denied/i.test(description)) {
+        return "Razorpay denied these API keys. Enable Route on the Razorpay account, then use keys that are allowed to create linked accounts.";
+      }
+      return description || fallback;
+    };
+    const userId = Number(req.user?.userId);
     const response = await fetch("https://api.razorpay.com/v2/accounts", {
       method: "POST",
       headers,
       body: JSON.stringify({
         email,
         phone,
+        type: "route",
+        reference_id: Number.isFinite(userId) && userId > 0 ? `provider_${userId}` : undefined,
         legal_business_name: businessName,
         customer_facing_business_name: businessName,
         business_type: "individual",
@@ -11219,7 +11229,7 @@ router.post("/v1/provider/payouts/razorpay", authRequired, async (req, res) => {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.id) {
-      res.status(502).json({ message: payload?.error?.description || "Razorpay could not create the linked account." });
+      res.status(502).json({ message: razorpayMessage(payload, "Razorpay could not create the linked account.") });
       return;
     }
     const productResponse = await fetch(`https://api.razorpay.com/v2/accounts/${payload.id}/products`, {
@@ -11229,7 +11239,7 @@ router.post("/v1/provider/payouts/razorpay", authRequired, async (req, res) => {
     });
     const product = await productResponse.json().catch(() => ({}));
     if (!productResponse.ok || !product.id) {
-      res.status(502).json({ message: product?.error?.description || "Razorpay did not enable Route for this account." });
+      res.status(502).json({ message: razorpayMessage(product, "Razorpay did not enable Route for this account.") });
       return;
     }
     const settlementResponse = await fetch(`https://api.razorpay.com/v2/accounts/${payload.id}/products/${product.id}`, {
@@ -11242,7 +11252,7 @@ router.post("/v1/provider/payouts/razorpay", authRequired, async (req, res) => {
     });
     const settlement = await settlementResponse.json().catch(() => ({}));
     if (!settlementResponse.ok) {
-      res.status(502).json({ message: settlement?.error?.description || "Razorpay did not accept the bank account." });
+      res.status(502).json({ message: razorpayMessage(settlement, "Razorpay did not accept the bank account.") });
       return;
     }
     res.json({ linked: true, accountId: payload.id });
