@@ -212,6 +212,35 @@ async function surepassRequest(path, body) {
   return { response, payload };
 }
 
+const SUREPASS_BANK_VERIFICATION_URL = "https://kyc-api.surepass.app/api/v1/bank-verification";
+
+async function surepassBankVerification(body) {
+  const token = surepassToken();
+  if (!token) {
+    throw providerError("Bank verification is not configured. Add SUREPASS_TOKEN for the production Surepass bank API.", 503);
+  }
+  let response;
+  try {
+    response = await fetch(SUREPASS_BANK_VERIFICATION_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(25000)
+    });
+  } catch {
+    return surepassRequest("/api/v1/bank-verification", body);
+  }
+  const payload = await response.json().catch(() => null);
+  if (surepassTokenRejected(payload)) {
+    return surepassRequest("/api/v1/bank-verification", body);
+  }
+  return { response, payload };
+}
+
 async function sandboxAccessToken(forceRefresh = false) {
   if (!forceRefresh && sandboxTokenCache.token && Date.now() < sandboxTokenCache.expiresAt) {
     return sandboxTokenCache.token;
@@ -957,12 +986,7 @@ async function verifyBankAccount({ userId, accountNumber, ifsc, ifscDetails = tr
     }
   } else if (provider === "surepass") {
     const body = { id_number: account, ifsc: code, ifsc_details: includeIfscDetails };
-    const paths = ["/api/v1/bank-verification"];
-    let result = null;
-    for (const path of paths) {
-      result = await surepassRequest(path, body);
-      if (!surepassScopeMiss(result.response, result.payload)) break;
-    }
+    const result = await surepassBankVerification(body);
     const data = result?.payload?.data || {};
     const details = data.ifsc_details && typeof data.ifsc_details === "object" ? data.ifsc_details : {};
     holderName = String(

@@ -969,7 +969,15 @@ export async function verifyProviderBankAccount(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
-  })) as { holderName: string; aadhaarName: string; matched: boolean; ifsc: string; submitted?: boolean };
+  })) as {
+    holderName: string;
+    aadhaarName: string;
+    matched: boolean;
+    ifsc: string;
+    bankName?: string;
+    bankBranch?: string;
+    submitted?: boolean;
+  };
 }
 
 export async function sendProviderKycOtp(token: string, aadhaar: string, notifyPhone?: string) {
