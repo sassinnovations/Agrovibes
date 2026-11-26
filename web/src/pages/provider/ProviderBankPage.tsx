@@ -38,6 +38,9 @@ export function ProviderBankPage() {
   const [account, setAccount] = useState("");
   const [confirmAccount, setConfirmAccount] = useState("");
   const [ifsc, setIfsc] = useState("");
+  const [ifscDetails, setIfscDetails] = useState(true);
+  const [bankName, setBankName] = useState("");
+  const [bankBranch, setBankBranch] = useState("");
   const [pin, setPin] = useState("");
 
   useEffect(() => {
@@ -92,9 +95,12 @@ export function ProviderBankPage() {
       const result = await verifyProviderBankAccount(token, {
         accountNumber: accountDigits,
         ifsc: ifscCode,
+        ifscDetails,
         applicantName: holderName.trim(),
         phone: draft.phone
       });
+      setBankName(result.bankName || "");
+      setBankBranch(result.bankBranch || "");
       if (!result.matched) {
         setError(`The bank account is in the name of ${result.holderName}. It does not match the verified Aadhaar name${result.aadhaarName ? `, ${result.aadhaarName}` : ""}.`);
         return;
@@ -183,6 +189,16 @@ export function ProviderBankPage() {
             IFSC Code
             <input value={ifsc} onChange={(event) => setIfsc(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11))} placeholder="e.g. SBIN0001234" />
           </label>
+          <label className="provider-bank__check">
+            <input type="checkbox" checked={ifscDetails} onChange={(event) => setIfscDetails(event.target.checked)} />
+            IFSC Details
+          </label>
+          {bankName || bankBranch ? (
+            <p className="provider-bank__meta">
+              {bankName}
+              {bankBranch ? ` · ${bankBranch}` : ""}
+            </p>
+          ) : null}
           <label>
             PIN code
             <input value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit PIN for Razorpay" inputMode="numeric" />
